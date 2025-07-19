@@ -1,0 +1,30 @@
+[package]
+name = "uncertain-rs"
+version = "0.1.0"
+edition = "2024"
+authors = ["Oleksandr Prokhorenko <your.email@example.com>"]
+license = "MIT"
+description = "A Rust library for uncertainty-aware programming, implementing the approach from 'Uncertain<T>: A First-Order Type for Uncertain Data'"
+homepage = "https://github.com/minikin/uncertain-rs"
+repository = "https://github.com/minikin/uncertain-rs"
+keywords = ["uncertainty", "probability", "statistics", "monte-carlo", "sprt"]
+categories = ["science", "algorithms", "mathematics"]
+
+[dependencies]
+rand = "0.9.1"
+uuid = { version = "1.0", features = ["v4"] }
+
+[dev-dependencies]
+approx = "0.5"
+
+[[example]]
+name = "basic_usage"
+path = "examples/basic_usage.rs"
+
+[[example]]
+name = "gps_speed"
+path = "examples/gps_speed.rs"
+
+[[example]]
+name = "speeding_ticket"
+path = "examples/speeding_ticket.rs"
