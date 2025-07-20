@@ -537,7 +537,7 @@ impl GraphProfiler {
 
         self.execution_times
             .entry(name.to_string())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(duration);
 
         result
@@ -573,7 +573,7 @@ impl GraphProfiler {
     /// Print all profiling results
     pub fn print_report(&self) {
         println!("=== Computation Graph Profiling Report ===");
-        for (name, _) in &self.execution_times {
+        for name in self.execution_times.keys() {
             if let Some(stats) = self.get_stats(name) {
                 println!("\n{name}:");
                 println!("  Count: {}", stats.count);

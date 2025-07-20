@@ -1,0 +1,16 @@
+# Clippy configuration for uncertain-rs
+
+# Allow functions with up to 8 arguments (default is 7)
+# This is reasonable for statistical/mathematical functions
+too-many-arguments-threshold = 8
+
+# Allow longer variable names for mathematical contexts
+# where descriptive names are important
+max-suggested-slice-pattern-length = 5
+
+# Don't warn about cognitive complexity for statistical algorithms
+# which can be inherently complex
+cognitive-complexity-threshold = 30
+
+# Allow some common patterns in mathematical/statistical code
+avoid-breaking-exported-api = false

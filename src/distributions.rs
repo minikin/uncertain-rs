@@ -402,7 +402,7 @@ mod tests {
     fn test_uniform_distribution() {
         let uniform = Uncertain::uniform(0.0, 10.0);
         let samples: Vec<f64> = uniform.take_samples(1000);
-        assert!(samples.iter().all(|&x| x >= 0.0 && x <= 10.0));
+        assert!(samples.iter().all(|&x| (0.0..=10.0).contains(&x)));
     }
 
     #[test]

@@ -143,8 +143,8 @@ impl Uncertain<bool> {
         let b = ((1.0 - beta_error) / alpha_error).ln();
 
         // Set indifference region (avoiding edge cases)
-        let p0 = (threshold - epsilon).max(0.001).min(0.999);
-        let p1 = (threshold + epsilon).max(0.001).min(0.999);
+        let p0 = (threshold - epsilon).clamp(0.001, 0.999);
+        let p1 = (threshold + epsilon).clamp(0.001, 0.999);
 
         let mut successes = 0;
         let mut samples = 0;
@@ -168,8 +168,8 @@ impl Uncertain<bool> {
             let x = successes as f64;
 
             // Avoid log(0) by clamping probabilities
-            let p0_clamped = p0.max(1e-10).min(1.0 - 1e-10);
-            let p1_clamped = p1.max(1e-10).min(1.0 - 1e-10);
+            let p0_clamped = p0.clamp(1e-10, 1.0 - 1e-10);
+            let p1_clamped = p1.clamp(1e-10, 1.0 - 1e-10);
 
             let llr = x * (p1_clamped / p0_clamped).ln()
                 + (n - x) * ((1.0 - p1_clamped) / (1.0 - p0_clamped)).ln();

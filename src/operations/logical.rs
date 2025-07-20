@@ -228,7 +228,7 @@ mod tests {
 
         assert!(!((a.clone() & b.clone()).sample()));
         assert!((a.clone() | b.clone()).sample());
-        assert!((!a).sample() == false);
+        assert!(!(!a).sample());
     }
 
     #[test]
@@ -289,6 +289,6 @@ mod tests {
         // Note: Current implementation doesn't fully preserve shared variable semantics
         // In the future, this should be close to 0 for a proper implementation
         // For now, just verify the logical operations execute without error
-        assert!(prob_both >= 0.0 && prob_both <= 1.0);
+        assert!((0.0..=1.0).contains(&prob_both));
     }
 }
