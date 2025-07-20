@@ -1,0 +1,127 @@
+// .vscode/snippets/rust.json - Correct location and format
+{
+  "Async function": {
+    "prefix": "afn",
+    "body": [
+      "async fn ${1:function_name}(${2:params}) -> Result<${3:()}, ${4:ServerError}> {",
+      "\t${5:// TODO: implement}",
+      "\tOk(${6:()})",
+      "}"
+    ],
+    "description": "Async function template"
+  },
+  "Test function": {
+    "prefix": "test",
+    "body": [
+      "#[tokio::test]",
+      "async fn ${1:test_name}() {",
+      "\t${2:// Arrange}",
+      "\t$0",
+      "\t${3:// Act}",
+      "\t",
+      "\t${4:// Assert}",
+      "}"
+    ],
+    "description": "Async test function"
+  },
+  "Result match": {
+    "prefix": "match_result",
+    "body": [
+      "match ${1:result} {",
+      "\tOk(${2:value}) => ${3:// handle success},",
+      "\tErr(${4:error}) => ${5:// handle error},",
+      "}"
+    ],
+    "description": "Match on Result"
+  },
+  "Option match": {
+    "prefix": "match_option",
+    "body": [
+      "match ${1:option} {",
+      "\tSome(${2:value}) => ${3:// handle some},",
+      "\tNone => ${4:// handle none},",
+      "}"
+    ],
+    "description": "Match on Option"
+  },
+  "Let else": {
+    "prefix": "let_else",
+    "body": [
+      "let ${1:Some(value)} = ${2:option} else {",
+      "\t${3:return Err(${4:ServerError::StartupError { message: \"Expected value\".to_string() }});}",
+      "};"
+    ],
+    "description": "Let-else pattern (Edition 2024)"
+  },
+  "Tracing info": {
+    "prefix": "info",
+    "body": ["tracing::info!(${1:\"message\"});"],
+    "description": "Tracing info log"
+  },
+  "Tracing debug": {
+    "prefix": "debug",
+    "body": ["tracing::debug!(${1:\"message\"});"],
+    "description": "Tracing debug log"
+  },
+  "Tracing error": {
+    "prefix": "error",
+    "body": ["tracing::error!(${1:\"message\"});"],
+    "description": "Tracing error log"
+  },
+  "Derive macro": {
+    "prefix": "derive",
+    "body": ["#[derive(${1:Debug, Clone, PartialEq, Eq})]"],
+    "description": "Common derive macro"
+  },
+  "Serde derive": {
+    "prefix": "serde",
+    "body": ["#[derive(${1:Debug, Clone, }Serialize, Deserialize)]"],
+    "description": "Serde derive macro"
+  },
+  "Thiserror enum": {
+    "prefix": "error_enum",
+    "body": [
+      "#[derive(Debug, Error)]",
+      "pub enum ${1:MyError} {",
+      "\t#[error(\"${2:Error message}: {0}\")]",
+      "\t${3:ErrorVariant}(#[from] ${4:std::io::Error}),",
+      "\t",
+      "\t#[error(\"${5:Custom error}: {message}\")]",
+      "\t${6:CustomError} { message: String },",
+      "}"
+    ],
+    "description": "Thiserror enum template"
+  },
+  "HTTP handler": {
+    "prefix": "handler",
+    "body": [
+      "async fn ${1:handler_name}(",
+      "\t${2:// Add extractors here}",
+      ") -> Result<${3:Json<Response>}, ${4:StatusCode}> {",
+      "\t${5:// TODO: implement}",
+      "\tOk(${6:Json(response)})",
+      "}"
+    ],
+    "description": "Axum HTTP handler template"
+  },
+  "Server struct": {
+    "prefix": "server",
+    "body": [
+      "pub struct ${1:Server} {",
+      "\tconfig: ${2:Config},",
+      "}",
+      "",
+      "impl ${1:Server} {",
+      "\tpub fn new(config: ${2:Config}) -> Self {",
+      "\t\tSelf { config }",
+      "\t}",
+      "\t",
+      "\tpub async fn start(self) -> Result<()> {",
+      "\t\t${3:// TODO: implement}",
+      "\t\tOk(())",
+      "\t}",
+      "}"
+    ],
+    "description": "Server struct template"
+  }
+}

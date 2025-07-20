@@ -1,0 +1,36 @@
+{
+    "recommendations": [
+        // Essential Rust development
+        "rust-lang.rust-analyzer",
+        // Enhanced TOML support
+        "tamasfe.even-better-toml",
+        // Error highlighting
+        "usernamehw.errorlens",
+        // Code formatting
+        "esbenp.prettier-vscode",
+        // Git integration
+        "eamodio.gitlens",
+        // Markdown support
+        "yzhang.markdown-all-in-one",
+        // Docker support
+        "ms-azuretools.vscode-docker",
+        // YAML support
+        "redhat.vscode-yaml",
+        // REST client for testing APIs
+        "humao.rest-client",
+        // Bracket pair colorization
+        "coenraads.bracket-pair-colorizer-2",
+        // Path intellisense
+        "christian-kohler.path-intellisense",
+        // Auto rename tag
+        "formulahendry.auto-rename-tag",
+        // Thunder Client (alternative to Postman)
+        "rangav.vscode-thunder-client",
+        // Better Comments
+        "aaron-bond.better-comments",
+        // Todo Tree
+        "gruntfuggly.todo-tree",
+        // Code Spell Checker
+        "streetsidesoftware.code-spell-checker"
+    ]
+}

@@ -1,0 +1,42 @@
+[
+    {
+        "key": "ctrl+shift+r",
+        "command": "workbench.action.tasks.runTask",
+        "args": "cargo run"
+    },
+    {
+        "key": "ctrl+shift+t",
+        "command": "workbench.action.tasks.runTask",
+        "args": "cargo test"
+    },
+    {
+        "key": "ctrl+shift+c",
+        "command": "workbench.action.tasks.runTask",
+        "args": "cargo check"
+    },
+    {
+        "key": "ctrl+shift+l",
+        "command": "workbench.action.tasks.runTask",
+        "args": "cargo clippy"
+    },
+    {
+        "key": "ctrl+shift+f",
+        "command": "workbench.action.tasks.runTask",
+        "args": "cargo fmt"
+    },
+    {
+        "key": "ctrl+shift+d",
+        "command": "workbench.action.tasks.runTask",
+        "args": "Development Check"
+    },
+    {
+        "key": "f12",
+        "command": "rust-analyzer.openDocs",
+        "when": "editorLangId == rust"
+    },
+    {
+        "key": "ctrl+k ctrl+i",
+        "command": "rust-analyzer.toggleInlayHints",
+        "when": "editorLangId == rust"
+    }
+]

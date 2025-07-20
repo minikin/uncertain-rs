@@ -1,0 +1,56 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug Zephyrite",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/zephyrite",
+            "args": [
+                "--port",
+                "8080",
+                "--log-level",
+                "debug"
+            ],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "preLaunchTask": "cargo build"
+        },
+        {
+            "name": "Debug Tests",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/deps/zephyrite-*",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "preLaunchTask": "cargo test"
+        },
+        {
+            "name": "Debug Current Test",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${workspaceFolder}/target/debug/deps/${fileBasenameNoExtension}-*",
+            "args": [
+                "${input:testName}"
+            ],
+            "cwd": "${workspaceFolder}",
+            "sourceLanguages": [
+                "rust"
+            ],
+            "preLaunchTask": "cargo test"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "testName",
+            "description": "Test function name",
+            "default": "",
+            "type": "promptString"
+        }
+    ]
+}
