@@ -367,8 +367,7 @@ impl GraphOptimizer {
     {
         // Apply optimizations in order
         let node = Self::eliminate_identity_operations(node);
-        let node = Self::constant_folding(node);
-        node
+        Self::constant_folding(node)
     }
 
     /// Eliminates identity operations like `x + 0` or `x * 1`
@@ -417,10 +416,7 @@ impl GraphVisualizer {
 
         match node {
             ComputationNode::Leaf { .. } => {
-                dot.push_str(&format!(
-                    "  {} [label=\"Leaf\", shape=circle];\n",
-                    current_id
-                ));
+                dot.push_str(&format!("  {current_id} [label=\"Leaf\", shape=circle];\n"));
             }
             ComputationNode::BinaryOp {
                 left,
@@ -434,49 +430,35 @@ impl GraphVisualizer {
                     BinaryOperation::Div => "Div",
                 };
                 dot.push_str(&format!(
-                    "  {} [label=\"{}\", shape=box];\n",
-                    current_id, op_name
+                    "  {current_id} [label=\"{op_name}\", shape=box];\n"
                 ));
 
                 let left_id = Self::add_node_to_dot(left, dot, node_id);
                 let right_id = Self::add_node_to_dot(right, dot, node_id);
 
-                dot.push_str(&format!("  {} -> {};\n", current_id, left_id));
-                dot.push_str(&format!("  {} -> {};\n", current_id, right_id));
+                dot.push_str(&format!("  {current_id} -> {left_id};\n"));
+                dot.push_str(&format!("  {current_id} -> {right_id};\n"));
             }
             ComputationNode::UnaryOp { operand, .. } => {
-                dot.push_str(&format!(
-                    "  {} [label=\"UnaryOp\", shape=box];\n",
-                    current_id
-                ));
+                dot.push_str(&format!("  {current_id} [label=\"UnaryOp\", shape=box];\n"));
                 let operand_id = Self::add_node_to_dot(operand, dot, node_id);
-                dot.push_str(&format!("  {} -> {};\n", current_id, operand_id));
+                dot.push_str(&format!("  {current_id} -> {operand_id};\n"));
             }
             ComputationNode::Conditional {
                 condition,
                 if_true,
                 if_false,
             } => {
-                dot.push_str(&format!(
-                    "  {} [label=\"If\", shape=diamond];\n",
-                    current_id
-                ));
+                dot.push_str(&format!("  {current_id} [label=\"If\", shape=diamond];\n"));
 
                 let cond_id = Self::add_node_to_dot(condition, dot, node_id);
                 let true_id = Self::add_node_to_dot(if_true, dot, node_id);
                 let false_id = Self::add_node_to_dot(if_false, dot, node_id);
 
+                dot.push_str(&format!("  {current_id} -> {cond_id} [label=\"cond\"];\n"));
+                dot.push_str(&format!("  {current_id} -> {true_id} [label=\"true\"];\n"));
                 dot.push_str(&format!(
-                    "  {} -> {} [label=\"cond\"];\n",
-                    current_id, cond_id
-                ));
-                dot.push_str(&format!(
-                    "  {} -> {} [label=\"true\"];\n",
-                    current_id, true_id
-                ));
-                dot.push_str(&format!(
-                    "  {} -> {} [label=\"false\"];\n",
-                    current_id, false_id
+                    "  {current_id} -> {false_id} [label=\"false\"];\n"
                 ));
             }
         }
@@ -493,7 +475,7 @@ impl GraphVisualizer {
 
         match node {
             ComputationNode::Leaf { id, .. } => {
-                println!("{}Leaf({})", prefix, id);
+                println!("{prefix}Leaf({id})");
             }
             ComputationNode::BinaryOp {
                 left,
@@ -506,12 +488,12 @@ impl GraphVisualizer {
                     BinaryOperation::Mul => "Mul",
                     BinaryOperation::Div => "Div",
                 };
-                println!("{}{}", prefix, op_name);
+                println!("{prefix}{op_name}");
                 Self::print_tree(left, indent + 1);
                 Self::print_tree(right, indent + 1);
             }
             ComputationNode::UnaryOp { operand, .. } => {
-                println!("{}UnaryOp", prefix);
+                println!("{prefix}UnaryOp");
                 Self::print_tree(operand, indent + 1);
             }
             ComputationNode::Conditional {
@@ -519,12 +501,12 @@ impl GraphVisualizer {
                 if_true,
                 if_false,
             } => {
-                println!("{}Conditional", prefix);
-                println!("{}  Condition:", prefix);
+                println!("{prefix}Conditional");
+                println!("{prefix}  Condition:");
                 Self::print_tree(condition, indent + 2);
-                println!("{}  If True:", prefix);
+                println!("{prefix}  If True:");
                 Self::print_tree(if_true, indent + 2);
-                println!("{}  If False:", prefix);
+                println!("{prefix}  If False:");
                 Self::print_tree(if_false, indent + 2);
             }
         }
@@ -593,7 +575,7 @@ impl GraphProfiler {
         println!("=== Computation Graph Profiling Report ===");
         for (name, _) in &self.execution_times {
             if let Some(stats) = self.get_stats(name) {
-                println!("\n{}:", name);
+                println!("\n{name}:");
                 println!("  Count: {}", stats.count);
                 println!("  Total: {:?}", stats.total);
                 println!("  Average: {:?}", stats.average);
@@ -667,7 +649,7 @@ mod tests {
         let leaf_id = uuid::Uuid::new_v4();
         let leaf = ComputationNode::Leaf {
             id: leaf_id,
-            sample: Arc::new(|| rand::random::<f64>()),
+            sample: Arc::new(rand::random::<f64>),
         };
 
         // Evaluate twice with the same context

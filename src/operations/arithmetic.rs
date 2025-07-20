@@ -15,8 +15,7 @@ pub trait Arithmetic:
 }
 
 /// Blanket implementation for any type that satisfies the arithmetic requirements
-impl<T> Arithmetic for T
-where
+impl<T> Arithmetic for T where
     T: Add<Output = T>
         + Sub<Output = T>
         + Mul<Output = T>

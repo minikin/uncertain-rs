@@ -176,13 +176,11 @@ where
         }
 
         let n = samples.len() as f64;
-        let skew = samples
+        samples
             .iter()
             .map(|x| ((x - mean) / std_dev).powi(3))
             .sum::<f64>()
-            / n;
-
-        skew
+            / n
     }
 
     /// Calculates the excess kurtosis of the distribution
