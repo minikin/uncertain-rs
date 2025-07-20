@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    assignees:
+      - "minikin"
+    reviewers:
+      - "minikin"
+    commit-message:
+      prefix: "deps"
+      include: "scope"

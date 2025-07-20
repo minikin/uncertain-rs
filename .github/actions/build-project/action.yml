@@ -1,0 +1,31 @@
+name: 'Build Project'
+description: 'Build the Rust project with optional release mode'
+inputs:
+  release:
+    description: 'Build in release mode'
+    required: false
+    default: 'false'
+  verbose:
+    description: 'Build with verbose output'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Build project
+      shell: bash
+      run: |
+        if [ "${{ inputs.release }}" == "true" ]; then
+          if [ "${{ inputs.verbose }}" == "true" ]; then
+            cargo build --release --verbose
+          else
+            cargo build --release
+          fi
+        else
+          if [ "${{ inputs.verbose }}" == "true" ]; then
+            cargo build --verbose
+          else
+            cargo build
+          fi
+        fi

@@ -1,0 +1,46 @@
+name: "Run Tests"
+description: "Run cargo tests with optional features"
+inputs:
+  test-type:
+    description: "Type of tests to run (lib, doc, all)"
+    required: false
+    default: "lib"
+  release:
+    description: "Run tests in release mode"
+    required: false
+    default: "false"
+  verbose:
+    description: "Run tests with verbose output"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run library tests
+      if: inputs.test-type == 'lib' || inputs.test-type == 'all'
+      shell: bash
+      run: |
+        if [ "${{ inputs.release }}" == "true" ]; then
+          if [ "${{ inputs.verbose }}" == "true" ]; then
+            cargo test --lib --release --verbose
+          else
+            cargo test --lib --release
+          fi
+        else
+          if [ "${{ inputs.verbose }}" == "true" ]; then
+            cargo test --lib --verbose
+          else
+            cargo test --lib
+          fi
+        fi
+
+    - name: Run doc tests
+      if: inputs.test-type == 'doc' || inputs.test-type == 'all'
+      shell: bash
+      run: |
+        if [ "${{ inputs.release }}" == "true" ]; then
+          cargo test --doc --release
+        else
+          cargo test --doc
+        fi

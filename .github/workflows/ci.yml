@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  CARGO_TERM_COLOR: always
+  MSRV: "1.70.0"
+
+jobs:
+  test:
+    name: Test Suite (${{ matrix.rust }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        rust: [stable, beta, nightly]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain: ${{ matrix.rust }}
+          components: rustfmt, clippy
+          cache-key-suffix: -test
+
+      - name: Quality checks (formatting & clippy)
+        uses: ./.github/actions/quality-checks
+        if: matrix.rust == 'stable'
+
+      - name: Build
+        uses: ./.github/actions/build-project
+
+      - name: Run tests
+        uses: ./.github/actions/run-tests
+        with:
+          test-type: lib
+          verbose: true
+
+      - name: Run doc tests
+        uses: ./.github/actions/run-tests
+        with:
+          test-type: doc
+          verbose: false
+        if: matrix.rust == 'stable'
+
+  coverage:
+    name: Code Coverage
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust for coverage
+        uses: ./.github/actions/setup-rust
+        with:
+          components: llvm-tools-preview
+          cache-key-suffix: -coverage
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Generate code coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: lcov.info
+          fail_ci_if_error: true
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust for security
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key-suffix: -security
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
+
+  msrv:
+    name: Minimum Supported Rust Version
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSRV Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          toolchain: ${{ env.MSRV }}
+          cache-key-suffix: -msrv
+
+      - name: Check MSRV compatibility
+        run: cargo check --lib
+
+  release-check:
+    name: Release Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust for release
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key-suffix: -release
+
+      - name: Build release
+        uses: ./.github/actions/build-project
+        with:
+          release: true
+
+      - name: Run release tests
+        uses: ./.github/actions/run-tests
+        with:
+          test-type: lib
+          release: true
+          verbose: true

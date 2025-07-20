@@ -1,0 +1,24 @@
+name: 'Quality Checks'
+description: 'Run formatting and linting checks'
+inputs:
+  skip-fmt:
+    description: 'Skip formatting check'
+    required: false
+    default: 'false'
+  skip-clippy:
+    description: 'Skip clippy check'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Check formatting
+      if: inputs.skip-fmt == 'false'
+      shell: bash
+      run: cargo fmt --all -- --check
+
+    - name: Run clippy
+      if: inputs.skip-clippy == 'false'
+      shell: bash
+      run: cargo clippy --all-targets --all-features -- -D warnings
