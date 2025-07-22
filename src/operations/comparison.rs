@@ -6,21 +6,27 @@ use crate::Uncertain;
 /// not `bool` (boolean facts). This prevents uncertainty bugs.
 pub trait Comparison<T> {
     /// Returns uncertain boolean evidence that this value is greater than threshold
+    #[must_use]
     fn gt(&self, threshold: T) -> Uncertain<bool>;
 
     /// Returns uncertain boolean evidence that this value is less than threshold
+    #[must_use]
     fn lt(&self, threshold: T) -> Uncertain<bool>;
 
     /// Returns uncertain boolean evidence that this value is greater than or equal to threshold
+    #[must_use]
     fn ge(&self, threshold: T) -> Uncertain<bool>;
 
     /// Returns uncertain boolean evidence that this value is less than or equal to threshold
+    #[must_use]
     fn le(&self, threshold: T) -> Uncertain<bool>;
 
     /// Returns uncertain boolean evidence that this value equals threshold
+    #[must_use]
     fn eq(&self, threshold: T) -> Uncertain<bool>;
 
     /// Returns uncertain boolean evidence that this value does not equal threshold
+    #[must_use]
     fn ne(&self, threshold: T) -> Uncertain<bool>;
 }
 
@@ -107,6 +113,7 @@ where
     /// let sensor2 = Uncertain::normal(12.0, 1.0);
     /// let evidence = sensor2.gt_uncertain(&sensor1);
     /// ```
+    #[must_use]
     pub fn gt_uncertain(&self, other: &Self) -> Uncertain<bool> {
         let sample_fn1 = self.sample_fn.clone();
         let sample_fn2 = other.sample_fn.clone();
@@ -114,6 +121,7 @@ where
     }
 
     /// Compare two uncertain values for less than
+    #[must_use]
     pub fn lt_uncertain(&self, other: &Self) -> Uncertain<bool> {
         let sample_fn1 = self.sample_fn.clone();
         let sample_fn2 = other.sample_fn.clone();
@@ -121,6 +129,7 @@ where
     }
 
     /// Compare two uncertain values for equality
+    #[must_use]
     pub fn eq_uncertain(&self, other: &Self) -> Uncertain<bool> {
         let sample_fn1 = self.sample_fn.clone();
         let sample_fn2 = other.sample_fn.clone();
@@ -142,6 +151,7 @@ impl Uncertain<f64> {
     ///
     /// let close_evidence = measurement.approx_eq(target, tolerance);
     /// ```
+    #[must_use]
     pub fn approx_eq(&self, target: f64, tolerance: f64) -> Uncertain<bool> {
         self.map(move |x| (x - target).abs() <= tolerance)
     }
@@ -155,6 +165,7 @@ impl Uncertain<f64> {
     /// let measurement = Uncertain::normal(10.0, 2.0);
     /// let in_range = measurement.within_range(8.0, 12.0);
     /// ```
+    #[must_use]
     pub fn within_range(&self, min: f64, max: f64) -> Uncertain<bool> {
         self.map(move |x| x >= min && x <= max)
     }
@@ -167,7 +178,7 @@ mod tests {
     #[test]
     fn test_comparison_returns_uncertain_bool() {
         let value = Uncertain::point(5.0);
-        let evidence = value.gt(3.0);
+        let evidence = Comparison::gt(&value, 3.0);
 
         // Should return Uncertain<bool>, not bool
         assert!(evidence.sample()); // 5 > 3 is always true
@@ -176,7 +187,7 @@ mod tests {
     #[test]
     fn test_comparison_with_uncertainty() {
         let value = Uncertain::normal(5.0, 1.0);
-        let evidence = value.gt(4.0);
+        let evidence = Comparison::gt(&value, 4.0);
 
         // With normal(5, 1), most samples should be > 4
         let samples: Vec<bool> = evidence.take_samples(1000);

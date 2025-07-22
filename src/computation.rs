@@ -11,6 +11,7 @@ pub struct SampleContext {
 
 impl SampleContext {
     /// Create a new empty sample context
+    #[must_use]
     pub fn new() -> Self {
         Self {
             memoized_values: HashMap::new(),
@@ -18,6 +19,7 @@ impl SampleContext {
     }
 
     /// Get a memoized value for a given node ID
+    #[must_use]
     pub fn get_value<T: Clone + 'static>(&self, id: &uuid::Uuid) -> Option<T> {
         self.memoized_values.get(id)?.downcast_ref::<T>().cloned()
     }
@@ -33,11 +35,13 @@ impl SampleContext {
     }
 
     /// Get the number of memoized values
+    #[must_use]
     pub fn len(&self) -> usize {
         self.memoized_values.len()
     }
 
     /// Check if the context is empty
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.memoized_values.is_empty()
     }
@@ -98,6 +102,11 @@ where
     ///
     /// This is the core evaluation method that respects memoization to ensure
     /// shared variables produce consistent samples within a single evaluation.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if called on a `BinaryOp` variant. Use `evaluate_arithmetic` instead for binary operations.
+    /// - Panics if called on a `Conditional` variant. Use `evaluate_conditional` instead for conditional operations.
     pub fn evaluate(&self, context: &mut SampleContext) -> T {
         match self {
             ComputationNode::Leaf { id, sample } => {
@@ -189,6 +198,7 @@ where
     ///
     /// This creates a fresh context for evaluation, useful when you want
     /// independent samples without memoization effects.
+    #[must_use]
     pub fn evaluate_fresh(&self) -> T
     where
         T: Arithmetic,
@@ -209,6 +219,7 @@ where
     }
 
     /// Creates a new binary operation node
+    #[must_use]
     pub fn binary_op(
         left: ComputationNode<T>,
         right: ComputationNode<T>,
@@ -233,6 +244,7 @@ where
     }
 
     /// Creates a conditional node
+    #[must_use]
     pub fn conditional(
         condition: ComputationNode<bool>,
         if_true: ComputationNode<T>,
@@ -246,6 +258,7 @@ where
     }
 
     /// Counts the number of nodes in the computation graph
+    #[must_use]
     pub fn node_count(&self) -> usize {
         match self {
             ComputationNode::Leaf { .. } => 1,
@@ -262,6 +275,7 @@ where
     }
 
     /// Gets the depth of the computation graph
+    #[must_use]
     pub fn depth(&self) -> usize {
         match self {
             ComputationNode::Leaf { .. } => 1,
@@ -276,6 +290,7 @@ where
     }
 
     /// Checks if the computation graph contains any conditional nodes
+    #[must_use]
     pub fn has_conditionals(&self) -> bool {
         match self {
             ComputationNode::Leaf { .. } => false,
@@ -361,6 +376,7 @@ pub struct GraphOptimizer;
 
 impl GraphOptimizer {
     /// Optimizes a computation graph by applying various transformations
+    #[must_use]
     pub fn optimize<T>(node: ComputationNode<T>) -> ComputationNode<T>
     where
         T: Clone + Send + Sync + 'static,
@@ -396,6 +412,7 @@ pub struct GraphVisualizer;
 
 impl GraphVisualizer {
     /// Generates a DOT graph representation for visualization
+    #[must_use]
     pub fn to_dot<T>(node: &ComputationNode<T>) -> String
     where
         T: Clone + Send + Sync + 'static,
@@ -520,6 +537,7 @@ pub struct GraphProfiler {
 
 impl GraphProfiler {
     /// Create a new profiler
+    #[must_use]
     pub fn new() -> Self {
         Self {
             execution_times: HashMap::new(),
@@ -544,6 +562,7 @@ impl GraphProfiler {
     }
 
     /// Get profiling statistics
+    #[must_use]
     pub fn get_stats(&self, name: &str) -> Option<ProfileStats> {
         let times = self.execution_times.get(name)?;
         if times.is_empty() {

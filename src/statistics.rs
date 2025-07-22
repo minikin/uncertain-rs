@@ -23,6 +23,7 @@ where
     /// let mode = categorical.mode(1000);
     /// // Should likely be "red"
     /// ```
+    #[must_use]
     pub fn mode(&self, sample_count: usize) -> Option<T>
     where
         T: Hash + Eq,
@@ -53,6 +54,7 @@ where
     /// let histogram = bernoulli.histogram(1000);
     /// // Should show roughly 700 true, 300 false
     /// ```
+    #[must_use]
     pub fn histogram(&self, sample_count: usize) -> HashMap<T, usize>
     where
         T: Hash + Eq,
@@ -77,6 +79,7 @@ where
     /// let entropy = uniform_coin.entropy(1000);
     /// // Should be close to 1.0 bit for fair coin
     /// ```
+    #[must_use]
     pub fn entropy(&self, sample_count: usize) -> f64
     where
         T: Hash + Eq,
@@ -109,6 +112,7 @@ where
     /// let mean = normal.expected_value(1000);
     /// // Should be approximately 10.0
     /// ```
+    #[must_use]
     pub fn expected_value(&self, sample_count: usize) -> f64 {
         let samples = self.take_samples(sample_count);
         let sum: f64 = samples.into_iter().map(|x| x.into()).sum();
@@ -125,6 +129,7 @@ where
     /// let variance = normal.variance(1000);
     /// // Should be approximately 4.0 (std_dev^2)
     /// ```
+    #[must_use]
     pub fn variance(&self, sample_count: usize) -> f64 {
         let samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -147,6 +152,7 @@ where
     /// let std_dev = normal.standard_deviation(1000);
     /// // Should be approximately 2.0
     /// ```
+    #[must_use]
     pub fn standard_deviation(&self, sample_count: usize) -> f64 {
         self.variance(sample_count).sqrt()
     }
@@ -161,6 +167,7 @@ where
     /// let skewness = normal.skewness(1000);
     /// // Should be approximately 0 for normal distribution
     /// ```
+    #[must_use]
     pub fn skewness(&self, sample_count: usize) -> f64 {
         let samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -193,6 +200,7 @@ where
     /// let kurtosis = normal.kurtosis(1000);
     /// // Should be approximately 0 for normal distribution (excess kurtosis)
     /// ```
+    #[must_use]
     pub fn kurtosis(&self, sample_count: usize) -> f64 {
         let samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -233,6 +241,7 @@ where
     /// let (lower, upper) = normal.confidence_interval(0.95, 1000);
     /// // 95% of values should fall between lower and upper
     /// ```
+    #[must_use]
     pub fn confidence_interval(&self, confidence: f64, sample_count: usize) -> (f64, f64) {
         let mut samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -262,6 +271,7 @@ where
     /// let prob = normal.cdf(0.0, 1000);
     /// // Should be approximately 0.5 for standard normal at 0
     /// ```
+    #[must_use]
     pub fn cdf(&self, value: f64, sample_count: usize) -> f64 {
         let samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -283,6 +293,7 @@ where
     /// let median = normal.quantile(0.5, 1000);
     /// // Should be approximately 0.0 for standard normal
     /// ```
+    #[must_use]
     pub fn quantile(&self, q: f64, sample_count: usize) -> f64 {
         let mut samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -308,6 +319,7 @@ where
     /// let iqr = normal.interquartile_range(1000);
     /// // IQR for standard normal is approximately 1.35
     /// ```
+    #[must_use]
     pub fn interquartile_range(&self, sample_count: usize) -> f64 {
         let q75 = self.quantile(0.75, sample_count);
         let q25 = self.quantile(0.25, sample_count);
@@ -323,6 +335,7 @@ where
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let mad = normal.median_absolute_deviation(1000);
     /// ```
+    #[must_use]
     pub fn median_absolute_deviation(&self, sample_count: usize) -> f64 {
         let samples: Vec<f64> = self
             .take_samples(sample_count)
@@ -350,6 +363,7 @@ impl Uncertain<f64> {
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let density = normal.pdf_kde(0.0, 1000, 0.1);
     /// ```
+    #[must_use]
     pub fn pdf_kde(&self, x: f64, sample_count: usize, bandwidth: f64) -> f64 {
         let samples = self.take_samples(sample_count);
 
@@ -373,6 +387,7 @@ impl Uncertain<f64> {
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let log_likelihood = normal.log_likelihood(0.0, 1000, 0.1);
     /// ```
+    #[must_use]
     pub fn log_likelihood(&self, x: f64, sample_count: usize, bandwidth: f64) -> f64 {
         let pdf = self.pdf_kde(x, sample_count, bandwidth);
         if pdf > 0.0 {
@@ -393,6 +408,7 @@ impl Uncertain<f64> {
     /// let correlation = x.correlation(&y, 1000);
     /// // Should be positive correlation
     /// ```
+    #[must_use]
     pub fn correlation(&self, other: &Uncertain<f64>, sample_count: usize) -> f64 {
         let samples_x = self.take_samples(sample_count);
         let samples_y = other.take_samples(sample_count);

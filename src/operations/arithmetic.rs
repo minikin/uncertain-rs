@@ -37,6 +37,7 @@ pub enum BinaryOperation {
 }
 
 impl BinaryOperation {
+    #[must_use]
     pub fn apply<T>(&self, left: T, right: T) -> T
     where
         T: Arithmetic,
@@ -217,6 +218,7 @@ impl Uncertain<f64> {
     /// let base = Uncertain::normal(2.0, 0.1);
     /// let squared = base.pow(2.0);
     /// ```
+    #[must_use]
     pub fn pow(&self, exponent: f64) -> Uncertain<f64> {
         self.map(move |x| x.powf(exponent))
     }
@@ -230,8 +232,9 @@ impl Uncertain<f64> {
     /// let positive = Uncertain::uniform(1.0, 100.0);
     /// let sqrt_val = positive.sqrt();
     /// ```
+    #[must_use]
     pub fn sqrt(&self) -> Uncertain<f64> {
-        self.map(|x| x.sqrt())
+        self.map(f64::sqrt)
     }
 
     /// Takes the natural logarithm of the uncertain value
@@ -243,8 +246,9 @@ impl Uncertain<f64> {
     /// let positive = Uncertain::uniform(0.1, 10.0);
     /// let ln_val = positive.ln();
     /// ```
+    #[must_use]
     pub fn ln(&self) -> Uncertain<f64> {
-        self.map(|x| x.ln())
+        self.map(f64::ln)
     }
 
     /// Takes the exponential of the uncertain value
@@ -256,8 +260,9 @@ impl Uncertain<f64> {
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let exp_val = normal.exp();
     /// ```
+    #[must_use]
     pub fn exp(&self) -> Uncertain<f64> {
-        self.map(|x| x.exp())
+        self.map(f64::exp)
     }
 
     /// Takes the absolute value of the uncertain value
@@ -269,23 +274,27 @@ impl Uncertain<f64> {
     /// let normal = Uncertain::normal(0.0, 2.0);
     /// let abs_val = normal.abs();
     /// ```
+    #[must_use]
     pub fn abs(&self) -> Uncertain<f64> {
-        self.map(|x| x.abs())
+        self.map(f64::abs)
     }
 
     /// Applies sine function to the uncertain value
+    #[must_use]
     pub fn sin(&self) -> Uncertain<f64> {
-        self.map(|x| x.sin())
+        self.map(f64::sin)
     }
 
     /// Applies cosine function to the uncertain value
+    #[must_use]
     pub fn cos(&self) -> Uncertain<f64> {
-        self.map(|x| x.cos())
+        self.map(f64::cos)
     }
 
     /// Applies tangent function to the uncertain value
+    #[must_use]
     pub fn tan(&self) -> Uncertain<f64> {
-        self.map(|x| x.tan())
+        self.map(f64::tan)
     }
 }
 
@@ -298,17 +307,17 @@ mod tests {
         let x = Uncertain::point(5.0);
         let y = Uncertain::point(3.0);
         let sum = x + y;
-        assert_eq!(sum.sample(), 8.0);
+        assert!((sum.sample() - 8.0_f64).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_scalar_addition() {
         let x = Uncertain::point(5.0);
         let sum = x + 3.0;
-        assert_eq!(sum.sample(), 8.0);
+        assert!((sum.sample() - 8.0_f64).abs() < f64::EPSILON);
 
         let sum2 = 3.0 + Uncertain::point(5.0);
-        assert_eq!(sum2.sample(), 8.0);
+        assert!((sum2.sample() - 8.0_f64).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -316,7 +325,7 @@ mod tests {
         let x = Uncertain::point(4.0);
         let y = Uncertain::point(3.0);
         let product = x * y;
-        assert_eq!(product.sample(), 12.0);
+        assert!((product.sample() - 12.0_f64).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -324,15 +333,15 @@ mod tests {
         let x = Uncertain::point(2.0);
         let y = Uncertain::point(3.0);
         let result = (x + y) * 2.0 - 1.0;
-        assert_eq!(result.sample(), 9.0); // (2 + 3) * 2 - 1 = 9
+        assert!((result.sample() - 9.0_f64).abs() < f64::EPSILON); // (2 + 3) * 2 - 1 = 9
     }
 
     #[test]
     fn test_mathematical_functions() {
         let x = Uncertain::point(4.0);
-        assert_eq!(x.sqrt().sample(), 2.0);
+        assert!((x.sqrt().sample() - 2.0_f64).abs() < f64::EPSILON);
 
         let y = Uncertain::point(2.0);
-        assert_eq!(y.pow(3.0).sample(), 8.0);
+        assert!((y.pow(3.0).sample() - 8.0_f64).abs() < f64::EPSILON);
     }
 }

@@ -37,6 +37,7 @@ impl Uncertain<bool> {
     ///     println!("Issue speeding ticket");
     /// }
     /// ```
+    #[must_use]
     pub fn probability_exceeds(&self, threshold: f64) -> bool {
         self.probability_exceeds_with_params(threshold, 0.95, 10000)
     }
@@ -50,6 +51,7 @@ impl Uncertain<bool> {
     /// let condition = Uncertain::bernoulli(0.7);
     /// let confident = condition.probability_exceeds_with_params(0.6, 0.99, 5000);
     /// ```
+    #[must_use]
     pub fn probability_exceeds_with_params(
         &self,
         threshold: f64,
@@ -68,7 +70,7 @@ impl Uncertain<bool> {
         result.decision
     }
 
-    /// Implicit conditional (equivalent to probability_exceeds(0.5))
+    /// Implicit conditional (equivalent to `probability_exceeds(0.5)`)
     ///
     /// This provides a convenient way to use uncertain booleans in if statements
     /// while still respecting the uncertainty.
@@ -84,6 +86,7 @@ impl Uncertain<bool> {
     ///     println!("More likely than not above threshold");
     /// }
     /// ```
+    #[must_use]
     pub fn implicit_conditional(&self) -> bool {
         self.probability_exceeds(0.5)
     }
@@ -98,7 +101,7 @@ impl Uncertain<bool> {
     /// * `confidence_level` - Overall confidence level
     /// * `max_samples` - Maximum samples before fallback decision
     /// * `epsilon` - Indifference region size (default: 0.05)
-    /// * `alpha` - Type I error rate (false positive, default: 1 - confidence_level)
+    /// * `alpha` - Type I error rate (false positive, default: 1 - `confidence_level`)
     /// * `beta` - Type II error rate (false negative, default: alpha)
     /// * `batch_size` - Samples to process in each batch (default: 10)
     ///
@@ -124,6 +127,7 @@ impl Uncertain<bool> {
     /// println!("Probability: {:.3}", result.probability);
     /// println!("Samples used: {}", result.samples_used);
     /// ```
+    #[must_use]
     pub fn evaluate_hypothesis(
         &self,
         threshold: f64,
@@ -213,6 +217,7 @@ impl Uncertain<bool> {
     /// let prob = condition.estimate_probability(1000);
     /// // Should be approximately 0.7
     /// ```
+    #[must_use]
     pub fn estimate_probability(&self, sample_count: usize) -> f64 {
         let samples: Vec<bool> = self.take_samples(sample_count);
         samples.iter().filter(|&&x| x).count() as f64 / samples.len() as f64
@@ -244,6 +249,7 @@ impl Uncertain<bool> {
     ///     1000
     /// );
     /// ```
+    #[must_use]
     pub fn bayesian_update(
         &self,
         prior_prob: f64,
@@ -296,6 +302,7 @@ impl MultipleHypothesisTester {
     ///
     /// let tester = MultipleHypothesisTester::new(hypotheses, names);
     /// ```
+    #[must_use]
     pub fn new(hypotheses: Vec<Uncertain<bool>>, names: Vec<&str>) -> Self {
         Self {
             hypotheses,
@@ -306,6 +313,7 @@ impl MultipleHypothesisTester {
     /// Test all hypotheses and return results
     ///
     /// Uses Bonferroni correction to control family-wise error rate.
+    #[must_use]
     pub fn test_all(
         &self,
         overall_alpha: f64,
@@ -333,6 +341,7 @@ impl MultipleHypothesisTester {
     }
 
     /// Find the hypothesis with the highest probability
+    #[must_use]
     pub fn find_most_likely(&self, sample_count: usize) -> Option<(String, f64)> {
         let mut best_name = None;
         let mut best_prob = 0.0;
@@ -414,7 +423,7 @@ mod tests {
     #[test]
     fn test_evidence_based_conditionals() {
         let speed = Uncertain::normal(55.0, 5.0);
-        let speeding_evidence = speed.gt(60.0);
+        let speeding_evidence = Comparison::gt(&speed, 60.0);
 
         // With mean=55, std=5, P(X > 60) should be relatively low
         let high_confidence = speeding_evidence.probability_exceeds(0.95);
@@ -444,9 +453,9 @@ mod tests {
     fn test_multiple_hypothesis_testing() {
         let temp = Uncertain::normal(22.0, 2.0);
         let hypotheses = vec![
-            temp.gt(20.0), // Should be likely true
-            temp.gt(30.0), // Should be false
-            temp.lt(15.0), // Should be false
+            Comparison::gt(&temp, 20.0), // Should be likely true
+            Comparison::gt(&temp, 30.0), // Should be false
+            Comparison::lt(&temp, 15.0), // Should be false
         ];
         let names = vec!["warm", "hot", "cold"];
 
@@ -465,9 +474,9 @@ mod tests {
     fn test_find_most_likely() {
         let temp = Uncertain::normal(22.0, 1.0);
         let hypotheses = vec![
-            temp.gt(25.0), // Unlikely
-            temp.gt(20.0), // Very likely
-            temp.lt(18.0), // Unlikely
+            Comparison::gt(&temp, 25.0), // Unlikely
+            Comparison::gt(&temp, 20.0), // Very likely
+            Comparison::lt(&temp, 18.0), // Unlikely
         ];
         let names = vec!["hot", "warm", "cold"];
 

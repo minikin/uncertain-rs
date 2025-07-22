@@ -3,21 +3,27 @@ use crate::Uncertain;
 /// Trait for logical operations on uncertain boolean values
 pub trait LogicalOps {
     /// Logical AND operation
+    #[must_use]
     fn and(&self, other: &Self) -> Self;
 
     /// Logical OR operation
+    #[must_use]
     fn or(&self, other: &Self) -> Self;
 
     /// Logical NOT operation
+    #[must_use]
     fn not(&self) -> Self;
 
     /// Logical XOR operation
+    #[must_use]
     fn xor(&self, other: &Self) -> Self;
 
     /// Logical NAND operation
+    #[must_use]
     fn nand(&self, other: &Self) -> Self;
 
     /// Logical NOR operation
+    #[must_use]
     fn nor(&self, other: &Self) -> Self;
 }
 
@@ -105,6 +111,7 @@ impl Uncertain<bool> {
     ///     || Uncertain::point(5.0)
     /// );
     /// ```
+    #[must_use]
     pub fn if_then_else<T, F1, F2>(&self, if_true: F1, if_false: F2) -> Uncertain<T>
     where
         T: Clone + Send + Sync + 'static,
@@ -133,11 +140,13 @@ impl Uncertain<bool> {
     /// // If it's raining, then I should have an umbrella
     /// let implication = raining.implies(&umbrella);
     /// ```
+    #[must_use]
     pub fn implies(&self, consequent: &Self) -> Uncertain<bool> {
         self.not().or(consequent)
     }
 
     /// Bi-conditional: A if and only if B (equivalent to (A && B) || (!A && !B))
+    #[must_use]
     pub fn if_and_only_if(&self, other: &Self) -> Uncertain<bool> {
         let both_true = self.and(other);
         let both_false = self.not().and(&other.not());
@@ -154,6 +163,7 @@ impl Uncertain<bool> {
     /// let prob = condition.probability(1000);
     /// // Should be approximately 0.7
     /// ```
+    #[must_use]
     pub fn probability(&self, sample_count: usize) -> f64 {
         let samples: Vec<bool> = self.take_samples(sample_count);
         samples.iter().filter(|&&x| x).count() as f64 / samples.len() as f64
@@ -279,8 +289,8 @@ mod tests {
     fn test_shared_variable_semantics() {
         // Test that logical operations work (shared variable semantics need further development)
         let x = Uncertain::normal(0.0, 1.0);
-        let above = x.gt(0.0);
-        let below = x.lt(0.0);
+        let above = Comparison::gt(&x, 0.0);
+        let below = Comparison::lt(&x, 0.0);
 
         // These should be mutually exclusive for the same sample in a perfect implementation
         let both = above.and(&below);

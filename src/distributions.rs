@@ -18,6 +18,7 @@ where
     /// let certain_value = Uncertain::point(42.0);
     /// assert_eq!(certain_value.sample(), 42.0);
     /// ```
+    #[must_use]
     pub fn point(value: T) -> Self {
         Uncertain::new(move || value.clone())
     }
@@ -39,6 +40,7 @@ where
     ///     Some(vec![0.7, 0.3])
     /// ).unwrap();
     /// ```
+    #[must_use]
     pub fn mixture(
         components: Vec<Uncertain<T>>,
         weights: Option<Vec<f64>>,
@@ -90,6 +92,7 @@ where
     /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
     /// let empirical = Uncertain::empirical(data).unwrap();
     /// ```
+    #[must_use]
     pub fn empirical(data: Vec<T>) -> Result<Self, &'static str> {
         if data.is_empty() {
             return Err("Data cannot be empty");
@@ -121,6 +124,7 @@ where
     ///
     /// let color = Uncertain::categorical(probs).unwrap();
     /// ```
+    #[must_use]
     pub fn categorical(probabilities: HashMap<T, f64>) -> Result<Self, &'static str> {
         if probabilities.is_empty() {
             return Err("Probabilities cannot be empty");
@@ -161,6 +165,7 @@ impl Uncertain<f64> {
     /// let normal = Uncertain::normal(0.0, 1.0); // Standard normal
     /// let measurement = Uncertain::normal(100.0, 5.0); // Measurement with error
     /// ```
+    #[must_use]
     pub fn normal(mean: f64, std_dev: f64) -> Self {
         Uncertain::new(move || {
             // Box-Muller transform for normal distribution
@@ -179,6 +184,7 @@ impl Uncertain<f64> {
     ///
     /// let uniform = Uncertain::uniform(0.0, 10.0);
     /// ```
+    #[must_use]
     pub fn uniform(min: f64, max: f64) -> Self {
         Uncertain::new(move || min + (max - min) * random::<f64>())
     }
@@ -194,6 +200,7 @@ impl Uncertain<f64> {
     ///
     /// let exponential = Uncertain::exponential(1.0);
     /// ```
+    #[must_use]
     pub fn exponential(rate: f64) -> Self {
         Uncertain::new(move || -random::<f64>().ln() / rate)
     }
@@ -210,6 +217,7 @@ impl Uncertain<f64> {
     ///
     /// let lognormal = Uncertain::log_normal(0.0, 1.0);
     /// ```
+    #[must_use]
     pub fn log_normal(mu: f64, sigma: f64) -> Self {
         let normal = Self::normal(mu, sigma);
         normal.map(|x| x.exp())
@@ -227,6 +235,7 @@ impl Uncertain<f64> {
     ///
     /// let beta = Uncertain::beta(2.0, 5.0);
     /// ```
+    #[must_use]
     pub fn beta(alpha: f64, beta: f64) -> Self {
         Uncertain::new(move || {
             // Using rejection sampling method
@@ -256,6 +265,7 @@ impl Uncertain<f64> {
     ///
     /// let gamma = Uncertain::gamma(2.0, 1.0);
     /// ```
+    #[must_use]
     pub fn gamma(shape: f64, scale: f64) -> Self {
         Uncertain::new(move || {
             // Marsaglia and Tsang method for shape >= 1
@@ -300,6 +310,7 @@ impl Uncertain<bool> {
     ///
     /// let biased_coin = Uncertain::bernoulli(0.7); // 70% chance of true
     /// ```
+    #[must_use]
     pub fn bernoulli(probability: f64) -> Self {
         Uncertain::new(move || random::<f64>() < probability)
     }
@@ -322,6 +333,7 @@ where
     ///
     /// let binomial = Uncertain::binomial(100, 0.3);
     /// ```
+    #[must_use]
     pub fn binomial(trials: u32, probability: f64) -> Self {
         Uncertain::new(move || {
             let mut count = T::default();
@@ -345,6 +357,7 @@ where
     ///
     /// let poisson = Uncertain::poisson(3.5);
     /// ```
+    #[must_use]
     pub fn poisson(lambda: f64) -> Self {
         Uncertain::new(move || {
             let l = (-lambda).exp();
@@ -375,6 +388,7 @@ where
     ///
     /// let geometric = Uncertain::geometric(0.1);
     /// ```
+    #[must_use]
     pub fn geometric(probability: f64) -> Self {
         Uncertain::new(move || {
             let mut trials = T::from(1);

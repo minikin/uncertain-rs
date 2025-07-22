@@ -71,6 +71,7 @@ where
     /// let sample = normal.sample();
     /// println!("Sample: {}", sample);
     /// ```
+    #[must_use]
     pub fn sample(&self) -> T {
         (self.sample_fn)()
     }
@@ -84,6 +85,7 @@ where
     /// let celsius = Uncertain::normal(20.0, 2.0);
     /// let fahrenheit = celsius.map(|c| c * 9.0/5.0 + 32.0);
     /// ```
+    #[must_use]
     pub fn map<U, F>(&self, transform: F) -> Uncertain<U>
     where
         U: Clone + Send + Sync + 'static,
@@ -102,6 +104,7 @@ where
     /// let base = Uncertain::normal(5.0, 1.0);
     /// let dependent = base.flat_map(|b| Uncertain::normal(b, 0.5));
     /// ```
+    #[must_use]
     pub fn flat_map<U, F>(&self, transform: F) -> Uncertain<U>
     where
         U: Clone + Send + Sync + 'static,
@@ -124,6 +127,7 @@ where
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let positive_only = normal.filter(|&x| x > 0.0);
     /// ```
+    #[must_use]
     pub fn filter<F>(&self, predicate: F) -> Uncertain<T>
     where
         F: Fn(&T) -> bool + Send + Sync + 'static,
@@ -148,6 +152,7 @@ where
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let first_10: Vec<f64> = normal.samples().take(10).collect();
     /// ```
+    #[must_use = "iterators are lazy and do nothing unless consumed"]
     pub fn samples(&self) -> impl Iterator<Item = T> + '_ {
         std::iter::repeat_with(|| self.sample())
     }
@@ -161,6 +166,7 @@ where
     /// let uniform = Uncertain::uniform(0.0, 1.0);
     /// let samples = uniform.take_samples(1000);
     /// ```
+    #[must_use]
     pub fn take_samples(&self, count: usize) -> Vec<T> {
         self.samples().take(count).collect()
     }
@@ -171,6 +177,7 @@ where
     T: Clone + Send + Sync + PartialOrd + 'static,
 {
     /// Compare this uncertain value with another, returning an uncertain boolean
+    #[must_use]
     pub fn less_than(&self, other: &Self) -> Uncertain<bool> {
         let self_fn = self.sample_fn.clone();
         let other_fn = other.sample_fn.clone();
@@ -183,6 +190,7 @@ where
     }
 
     /// Compare this uncertain value with another, returning an uncertain boolean
+    #[must_use]
     pub fn greater_than(&self, other: &Self) -> Uncertain<bool> {
         let self_fn = self.sample_fn.clone();
         let other_fn = other.sample_fn.clone();
