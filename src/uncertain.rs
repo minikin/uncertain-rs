@@ -166,6 +166,72 @@ where
     }
 }
 
+impl<T> Uncertain<T>
+where
+    T: Clone + Send + Sync + PartialOrd + 'static,
+{
+    /// Compare this uncertain value with another, returning an uncertain boolean
+    pub fn less_than(&self, other: &Self) -> Uncertain<bool> {
+        let self_fn = self.sample_fn.clone();
+        let other_fn = other.sample_fn.clone();
+
+        Uncertain::new(move || {
+            let a = self_fn();
+            let b = other_fn();
+            a < b
+        })
+    }
+
+    /// Compare this uncertain value with another, returning an uncertain boolean
+    pub fn greater_than(&self, other: &Self) -> Uncertain<bool> {
+        let self_fn = self.sample_fn.clone();
+        let other_fn = other.sample_fn.clone();
+
+        Uncertain::new(move || {
+            let a = self_fn();
+            let b = other_fn();
+            a > b
+        })
+    }
+}
+
+// Implement comparison operators
+
+impl<T> std::cmp::PartialEq for Uncertain<T>
+where
+    T: Clone + Send + Sync + PartialEq + 'static,
+{
+    fn eq(&self, other: &Self) -> bool {
+        // This is a fallback for direct equality testing
+        let sample_a = self.sample();
+        let sample_b = other.sample();
+        sample_a == sample_b
+    }
+}
+
+impl<T> std::cmp::PartialOrd for Uncertain<T>
+where
+    T: Clone + Send + Sync + PartialOrd + 'static,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        let sample_a = self.sample();
+        let sample_b = other.sample();
+        sample_a.partial_cmp(&sample_b)
+    }
+
+    fn lt(&self, other: &Self) -> bool {
+        let sample_a = self.sample();
+        let sample_b = other.sample();
+        sample_a < sample_b
+    }
+
+    fn gt(&self, other: &Self) -> bool {
+        let sample_a = self.sample();
+        let sample_b = other.sample();
+        sample_a > sample_b
+    }
+}
+
 impl<T> std::fmt::Debug for Uncertain<T>
 where
     T: Clone + Send + Sync + std::fmt::Debug + 'static,

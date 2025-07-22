@@ -54,20 +54,22 @@ fn main() {
     // Create uncertain values
     let x = Uncertain::normal(5.0, 1.0);
     let y = Uncertain::normal(3.0, 0.5);
-    
+
     // Perform arithmetic operations
     let sum = x + y;
     let product = x * y;
-    
+
     // Sample from the distributions
     println!("Sum sample: {}", sum.sample());
     println!("Product sample: {}", product.sample());
-    
+
     // Statistical analysis
     println!("Sum mean: {}", sum.expected_value(1000));
     println!("Sum std dev: {}", sum.standard_deviation(1000));
 }
 ```
+
+For more examples, see the [examples directory](examples).
 
 ## License
 
