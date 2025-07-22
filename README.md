@@ -5,11 +5,13 @@
 [![Documentation](https://docs.rs/uncertain-rs/badge.svg)](https://docs.rs/uncertain-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Rust library for uncertainty-aware programming, implementing the approach from "Uncertain<T>: A First-Order Type for Uncertain Data" by Bornholt, Mytkowicz, and McKinley.
+A Rust library for uncertainty-aware programming, implementing the approach from
+"Uncertain<T>: A First-Order Type for Uncertain Data" by Bornholt, Mytkowicz, and McKinley.
 
 ## Core Concept: Evidence-Based Conditionals
 
-Instead of treating uncertain data as exact values (which leads to bugs), this library uses evidence-based conditionals that account for uncertainty:
+Instead of treating uncertain data as exact values (which leads to bugs),
+this library uses evidence-based conditionals that account for uncertainty:
 
 ```rust
 use uncertain_rs::Uncertain;
