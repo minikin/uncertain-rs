@@ -115,7 +115,7 @@ where
     #[must_use]
     pub fn expected_value(&self, sample_count: usize) -> f64 {
         let samples = self.take_samples(sample_count);
-        let sum: f64 = samples.into_iter().map(|x| x.into()).sum();
+        let sum: f64 = samples.into_iter().map(Into::into).sum();
         sum / sample_count as f64
     }
 
@@ -134,7 +134,7 @@ where
         let samples: Vec<f64> = self
             .take_samples(sample_count)
             .into_iter()
-            .map(|x| x.into())
+            .map(Into::into)
             .collect();
 
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -172,7 +172,7 @@ where
         let samples: Vec<f64> = self
             .take_samples(sample_count)
             .into_iter()
-            .map(|x| x.into())
+            .map(Into::into)
             .collect();
 
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -205,7 +205,7 @@ where
         let samples: Vec<f64> = self
             .take_samples(sample_count)
             .into_iter()
-            .map(|x| x.into())
+            .map(Into::into)
             .collect();
 
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -233,6 +233,10 @@ where
 {
     /// Calculates confidence interval bounds
     ///
+    /// # Panics
+    ///
+    /// Panics if the samples contain values that cannot be compared (e.g., NaN values).
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -246,7 +250,7 @@ where
         let mut samples: Vec<f64> = self
             .take_samples(sample_count)
             .into_iter()
-            .map(|x| x.into())
+            .map(Into::into)
             .collect();
 
         samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -276,7 +280,7 @@ where
         let samples: Vec<f64> = self
             .take_samples(sample_count)
             .into_iter()
-            .map(|x| x.into())
+            .map(Into::into)
             .collect();
 
         let count = samples.iter().filter(|&&x| x <= value).count();
@@ -327,6 +331,10 @@ where
     }
 
     /// Estimates the median absolute deviation (MAD)
+    ///
+    /// # Panics
+    ///
+    /// Panics if the samples contain values that cannot be compared (e.g., NaN values).
     ///
     /// # Example
     /// ```rust
