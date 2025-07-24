@@ -1,4 +1,8 @@
-#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 
 use crate::Uncertain;
 use std::collections::HashMap;
@@ -260,7 +264,8 @@ where
         let alpha = 1.0 - confidence;
         let samples_len = samples.len();
         let lower_idx = ((alpha / 2.0) * samples_len as f64).floor() as usize;
-        let upper_idx = (((1.0 - alpha / 2.0) * samples_len as f64).floor() as usize).saturating_sub(1);
+        let upper_idx =
+            (((1.0 - alpha / 2.0) * samples_len as f64).floor() as usize).saturating_sub(1);
 
         let lower_idx = lower_idx.min(samples.len() - 1);
         let upper_idx = upper_idx.min(samples.len() - 1);

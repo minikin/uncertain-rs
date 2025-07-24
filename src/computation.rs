@@ -586,8 +586,12 @@ impl GraphProfiler {
         let mut sorted_times = times.clone();
         sorted_times.sort();
         let median = sorted_times[count / 2];
-        let min = *sorted_times.first().expect("Times vector should not be empty");
-        let max = *sorted_times.last().expect("Times vector should not be empty");
+        let min = *sorted_times
+            .first()
+            .expect("Times vector should not be empty");
+        let max = *sorted_times
+            .last()
+            .expect("Times vector should not be empty");
 
         Some(ProfileStats {
             count,

@@ -88,7 +88,10 @@ where
                 .iter()
                 .position(|&x| r <= x)
                 .unwrap_or_else(|| components.len().saturating_sub(1));
-            components.get(idx).map_or_else(|| components[0].sample(), super::uncertain::Uncertain::sample)
+            components.get(idx).map_or_else(
+                || components[0].sample(),
+                super::uncertain::Uncertain::sample,
+            )
         }))
     }
 
@@ -170,7 +173,13 @@ where
         Ok(Uncertain::new(move || {
             let r: f64 = random();
             cumulative.iter().find(|(_, cum)| r <= *cum).map_or_else(
-                || cumulative.last().expect("Cumulative vector should not be empty").0.clone(),
+                || {
+                    cumulative
+                        .last()
+                        .expect("Cumulative vector should not be empty")
+                        .0
+                        .clone()
+                },
                 |(val, _)| val.clone(),
             )
         }))

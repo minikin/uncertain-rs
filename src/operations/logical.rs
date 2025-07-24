@@ -57,9 +57,9 @@ impl LogicalOps for Uncertain<bool> {
     /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
     /// let temperature = Uncertain::normal(25.0, 5.0);
-/// let high_temp = Comparison::gt(&temperature, 30.0);
+    /// let high_temp = Comparison::gt(&temperature, 30.0);
     /// let humidity = Uncertain::normal(75.0, 10.0);
-/// let high_humidity = Comparison::gt(&humidity, 80.0);
+    /// let high_humidity = Comparison::gt(&humidity, 80.0);
     ///
     /// let uncomfortable = LogicalOps::or(&high_temp, &high_humidity);
     /// ```
@@ -76,7 +76,7 @@ impl LogicalOps for Uncertain<bool> {
     /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
     /// let speed = Uncertain::normal(55.0, 5.0);
-/// let speeding = Comparison::gt(&speed, 60.0);
+    /// let speeding = Comparison::gt(&speed, 60.0);
     /// let not_speeding = LogicalOps::not(&speeding);
     /// ```
     fn not(&self) -> Self {

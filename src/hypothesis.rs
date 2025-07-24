@@ -311,7 +311,10 @@ impl MultipleHypothesisTester {
     pub fn new(hypotheses: Vec<Uncertain<bool>>, names: Vec<&str>) -> Self {
         Self {
             hypotheses,
-            names: names.into_iter().map(std::string::ToString::to_string).collect(),
+            names: names
+                .into_iter()
+                .map(std::string::ToString::to_string)
+                .collect(),
         }
     }
 
@@ -441,7 +444,7 @@ mod tests {
         assert!(!high_confidence); // Very unlikely to be 95% confident
     }
 
-    #[test] 
+    #[test]
     fn test_bayesian_update() {
         let test_positive = Uncertain::bernoulli(0.95);
 
