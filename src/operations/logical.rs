@@ -1,3 +1,5 @@
+#![allow(clippy::cast_precision_loss)]
+
 use crate::Uncertain;
 
 /// Trait for logical operations on uncertain boolean values
@@ -32,7 +34,7 @@ impl LogicalOps for Uncertain<bool> {
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, operations::LogicalOps};
+    /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
     /// let temp_ok = Uncertain::normal(20.0, 2.0).within_range(18.0, 25.0);
     /// let humidity_ok = Uncertain::normal(50.0, 5.0).within_range(40.0, 60.0);
@@ -52,12 +54,14 @@ impl LogicalOps for Uncertain<bool> {
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, operations::LogicalOps};
+    /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
-    /// let high_temp = temperature.gt(30.0);
-    /// let high_humidity = humidity.gt(80.0);
+    /// let temperature = Uncertain::normal(25.0, 5.0);
+/// let high_temp = Comparison::gt(&temperature, 30.0);
+    /// let humidity = Uncertain::normal(75.0, 10.0);
+/// let high_humidity = Comparison::gt(&humidity, 80.0);
     ///
-    /// let uncomfortable = high_temp.or(&high_humidity);
+    /// let uncomfortable = LogicalOps::or(&high_temp, &high_humidity);
     /// ```
     fn or(&self, other: &Self) -> Self {
         let sample_fn1 = self.sample_fn.clone();
@@ -69,10 +73,11 @@ impl LogicalOps for Uncertain<bool> {
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, operations::LogicalOps};
+    /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
-    /// let speeding = speed.gt(60.0);
-    /// let not_speeding = speeding.not();
+    /// let speed = Uncertain::normal(55.0, 5.0);
+/// let speeding = Comparison::gt(&speed, 60.0);
+    /// let not_speeding = LogicalOps::not(&speeding);
     /// ```
     fn not(&self) -> Self {
         let sample_fn = self.sample_fn.clone();
@@ -260,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn test_if_then_else() {
         let condition = Uncertain::bernoulli(0.8);
         let result = condition.if_then_else(|| Uncertain::point(10.0), || Uncertain::point(5.0));

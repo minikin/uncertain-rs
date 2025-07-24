@@ -1,10 +1,10 @@
+#![allow(clippy::cast_precision_loss)]
 use uncertain_rs::Uncertain;
 
 /// GPS Navigation with Uncertainty-Aware Route Planning
 ///
 /// This example demonstrates how uncertain GPS readings affect
 /// arrival time predictions and route decisions.
-
 fn main() {
     println!("🚗 GPS Navigation with Uncertainty Analysis");
     println!("===========================================\n");
@@ -27,14 +27,20 @@ fn main() {
     println!("📍 Distance Analysis:");
     let samples: Vec<f64> = distance.take_samples(1000);
     let mean_distance = samples.iter().sum::<f64>() / samples.len() as f64;
-    let std_distance = (samples.iter().map(|x| (x - mean_distance).powi(2)).sum::<f64>()
-                       / samples.len() as f64).sqrt();
+    let std_distance = (samples
+        .iter()
+        .map(|x| (x - mean_distance).powi(2))
+        .sum::<f64>()
+        / samples.len() as f64)
+        .sqrt();
 
-    println!("   Mean distance: {:.3} miles", mean_distance);
-    println!("   Std deviation: {:.4} miles", std_distance);
-    println!("   95% confidence: {:.3} - {:.3} miles",
-             mean_distance - 1.96 * std_distance,
-             mean_distance + 1.96 * std_distance);
+    println!("   Mean distance: {mean_distance:.3} miles");
+    println!("   Std deviation: {std_distance:.4} miles");
+    println!(
+        "   95% confidence: {:.3} - {:.3} miles",
+        mean_distance - 1.96 * std_distance,
+        mean_distance + 1.96 * std_distance
+    );
 
     // Speed varies due to traffic, weather, driver behavior
     let base_speed = Uncertain::normal(35.0, 8.0); // mph, with uncertainty
@@ -48,11 +54,15 @@ fn main() {
     println!("\n⏱️  Travel Time Analysis:");
     let time_samples: Vec<f64> = travel_time_minutes.take_samples(1000);
     let mean_time = time_samples.iter().sum::<f64>() / time_samples.len() as f64;
-    let std_time = (time_samples.iter().map(|x| (x - mean_time).powi(2)).sum::<f64>()
-                   / time_samples.len() as f64).sqrt();
+    let std_time = (time_samples
+        .iter()
+        .map(|x| (x - mean_time).powi(2))
+        .sum::<f64>()
+        / time_samples.len() as f64)
+        .sqrt();
 
-    println!("   Expected time: {:.1} minutes", mean_time);
-    println!("   Std deviation: {:.1} minutes", std_time);
+    println!("   Expected time: {mean_time:.1} minutes");
+    println!("   Std deviation: {std_time:.1} minutes");
 
     // Probability analysis for arrival predictions
     let late_threshold = 10.0; // minutes
@@ -61,7 +71,11 @@ fn main() {
     let late_samples: Vec<bool> = will_be_late.take_samples(1000);
     let late_probability = late_samples.iter().filter(|&&x| x).count() as f64 / 1000.0;
 
-    println!("   Probability of taking >{}min: {:.1}%", late_threshold, late_probability * 100.0);
+    println!(
+        "   Probability of taking >{}min: {:.1}%",
+        late_threshold,
+        late_probability * 100.0
+    );
 
     // Route decision with uncertainty
     println!("\n🛣️  Route Decision Analysis:");
@@ -73,10 +87,17 @@ fn main() {
 
     // Compare routes using evidence-based reasoning
     let main_faster = travel_time_minutes.less_than(&alt_time);
-    let confidence_main_faster = main_faster.take_samples(1000)
-        .iter().filter(|&&x| x).count() as f64 / 1000.0;
+    let confidence_main_faster = main_faster
+        .take_samples(1000)
+        .iter()
+        .filter(|&&x| x)
+        .count() as f64
+        / 1000.0;
 
-    println!("   Main route faster: {:.1}% confidence", confidence_main_faster * 100.0);
+    println!(
+        "   Main route faster: {:.1}% confidence",
+        confidence_main_faster * 100.0
+    );
 
     if confidence_main_faster > 0.7 {
         println!("   ✅ Recommendation: Take main route");
@@ -94,15 +115,22 @@ fn main() {
     let fuel_samples: Vec<f64> = fuel_needed.take_samples(1000);
     let mean_fuel = fuel_samples.iter().sum::<f64>() / fuel_samples.len() as f64;
 
-    println!("   Expected fuel: {:.3} gallons", mean_fuel);
+    println!("   Expected fuel: {mean_fuel:.3} gallons");
 
     // Check if we have enough fuel
     let current_fuel = Uncertain::uniform(0.8, 1.2); // Uncertain fuel gauge reading
     let enough_fuel = current_fuel.greater_than(&fuel_needed);
-    let fuel_confidence = enough_fuel.take_samples(1000)
-        .iter().filter(|&&x| x).count() as f64 / 1000.0;
+    let fuel_confidence = enough_fuel
+        .take_samples(1000)
+        .iter()
+        .filter(|&&x| x)
+        .count() as f64
+        / 1000.0;
 
-    println!("   Confidence we have enough fuel: {:.1}%", fuel_confidence * 100.0);
+    println!(
+        "   Confidence we have enough fuel: {:.1}%",
+        fuel_confidence * 100.0
+    );
 
     if fuel_confidence < 0.8 {
         println!("   ⚠️  Consider refueling before the trip!");

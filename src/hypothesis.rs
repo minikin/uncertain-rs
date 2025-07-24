@@ -1,3 +1,5 @@
+#![allow(clippy::cast_precision_loss)]
+
 use crate::Uncertain;
 
 /// Result of hypothesis testing
@@ -30,7 +32,7 @@ impl Uncertain<bool> {
     /// use uncertain_rs::{Uncertain, operations::Comparison};
     ///
     /// let speed = Uncertain::normal(55.0, 5.0);
-    /// let speeding_evidence = speed.gt(60.0);
+    /// let speeding_evidence = Comparison::gt(&speed, 60.0);
     ///
     /// // Only issue ticket if 95% confident speeding
     /// if speeding_evidence.probability_exceeds(0.95) {
@@ -80,7 +82,7 @@ impl Uncertain<bool> {
     /// use uncertain_rs::{Uncertain, operations::Comparison};
     ///
     /// let measurement = Uncertain::normal(10.0, 2.0);
-    /// let above_threshold = measurement.gt(8.0);
+    /// let above_threshold = Comparison::gt(&measurement, 8.0);
     ///
     /// if above_threshold.implicit_conditional() {
     ///     println!("More likely than not above threshold");
@@ -169,7 +171,7 @@ impl Uncertain<bool> {
 
             // Compute log-likelihood ratio (LLR)
             let n = samples as f64;
-            let x = successes as f64;
+            let x = f64::from(successes);
 
             // Avoid log(0) by clamping probabilities
             let p0_clamped = p0.clamp(1e-10, 1.0 - 1e-10);
@@ -182,7 +184,7 @@ impl Uncertain<bool> {
                 // Accept H0: P(true) <= threshold
                 return HypothesisResult {
                     decision: false,
-                    probability: successes as f64 / samples as f64,
+                    probability: f64::from(successes) / samples as f64,
                     confidence_level,
                     samples_used: samples,
                 };
@@ -190,7 +192,7 @@ impl Uncertain<bool> {
                 // Accept H1: P(true) > threshold
                 return HypothesisResult {
                     decision: true,
-                    probability: successes as f64 / samples as f64,
+                    probability: f64::from(successes) / samples as f64,
                     confidence_level,
                     samples_used: samples,
                 };
@@ -198,7 +200,7 @@ impl Uncertain<bool> {
         }
 
         // Fallback decision based on observed probability
-        let final_p = successes as f64 / samples as f64;
+        let final_p = f64::from(successes) / samples as f64;
         HypothesisResult {
             decision: final_p > threshold,
             probability: final_p,
@@ -220,7 +222,11 @@ impl Uncertain<bool> {
     #[must_use]
     pub fn estimate_probability(&self, sample_count: usize) -> f64 {
         let samples: Vec<bool> = self.take_samples(sample_count);
-        samples.iter().filter(|&&x| x).count() as f64 / samples.len() as f64
+        if samples.is_empty() {
+            0.0
+        } else {
+            samples.iter().filter(|&&x| x).count() as f64 / samples.len() as f64
+        }
     }
 
     /// Bayesian evidence update using Bayes' theorem
@@ -241,7 +247,7 @@ impl Uncertain<bool> {
     /// let disease = Uncertain::bernoulli(0.01); // 1% base rate
     /// let test_positive = Uncertain::bernoulli(0.95); // Test result
     ///
-    /// let posterior = disease.bayesian_update(
+    /// let posterior = Uncertain::bayesian_update(
     ///     0.01, // prior probability
     ///     &test_positive,
     ///     0.95, // sensitivity (true positive rate)
@@ -251,7 +257,6 @@ impl Uncertain<bool> {
     /// ```
     #[must_use]
     pub fn bayesian_update(
-        &self,
         prior_prob: f64,
         evidence: &Uncertain<bool>,
         likelihood_given_true: f64,
@@ -290,13 +295,13 @@ impl MultipleHypothesisTester {
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, hypothesis::MultipleHypothesisTester};
+    /// use uncertain_rs::{Uncertain, hypothesis::MultipleHypothesisTester, operations::Comparison};
     ///
     /// let temp = Uncertain::normal(22.0, 2.0);
     /// let hypotheses = vec![
-    ///     temp.gt(20.0),
-    ///     temp.gt(25.0),
-    ///     temp.lt(18.0),
+    ///     Comparison::gt(&temp, 20.0),
+    ///     Comparison::gt(&temp, 25.0),
+    ///     Comparison::lt(&temp, 18.0),
     /// ];
     /// let names = vec!["warm", "hot", "cold"];
     ///
@@ -306,7 +311,7 @@ impl MultipleHypothesisTester {
     pub fn new(hypotheses: Vec<Uncertain<bool>>, names: Vec<&str>) -> Self {
         Self {
             hypotheses,
-            names: names.into_iter().map(|s| s.to_string()).collect(),
+            names: names.into_iter().map(std::string::ToString::to_string).collect(),
         }
     }
 
@@ -319,7 +324,11 @@ impl MultipleHypothesisTester {
         overall_alpha: f64,
         max_samples: usize,
     ) -> Vec<(String, HypothesisResult)> {
-        let corrected_alpha = overall_alpha / self.hypotheses.len() as f64;
+        let corrected_alpha = if self.hypotheses.is_empty() {
+            overall_alpha
+        } else {
+            overall_alpha / self.hypotheses.len() as f64
+        };
         let confidence_level = 1.0 - corrected_alpha;
 
         self.hypotheses
@@ -432,12 +441,11 @@ mod tests {
         assert!(!high_confidence); // Very unlikely to be 95% confident
     }
 
-    #[test]
+    #[test] 
     fn test_bayesian_update() {
-        let disease = Uncertain::bernoulli(0.01);
         let test_positive = Uncertain::bernoulli(0.95);
 
-        let posterior = disease.bayesian_update(
+        let posterior = Uncertain::bayesian_update(
             0.01, // prior: 1% disease rate
             &test_positive,
             0.95, // sensitivity
@@ -448,7 +456,6 @@ mod tests {
         // Posterior should be higher than prior given positive test
         assert!(posterior > 0.01);
     }
-
     #[test]
     fn test_multiple_hypothesis_testing() {
         let temp = Uncertain::normal(22.0, 2.0);

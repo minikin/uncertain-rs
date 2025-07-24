@@ -1,3 +1,5 @@
+#![allow(clippy::cast_precision_loss)]
+
 use crate::Uncertain;
 
 /// Trait for comparison operations that return uncertain boolean evidence
@@ -41,7 +43,7 @@ where
     /// use uncertain_rs::{Uncertain, operations::Comparison};
     ///
     /// let speed = Uncertain::normal(55.0, 5.0);
-    /// let speeding_evidence = speed.gt(60.0);
+    /// let speeding_evidence = Comparison::gt(&speed, 60.0);
     ///
     /// if speeding_evidence.probability_exceeds(0.95) {
     ///     println!("95% confident speeding");
@@ -59,7 +61,7 @@ where
     /// use uncertain_rs::{Uncertain, operations::Comparison};
     ///
     /// let temperature = Uncertain::normal(1.0, 2.0);
-    /// let freezing_evidence = temperature.lt(0.0);
+    /// let freezing_evidence = Comparison::lt(&temperature, 0.0);
     ///
     /// if freezing_evidence.probability_exceeds(0.8) {
     ///     println!("Likely freezing");

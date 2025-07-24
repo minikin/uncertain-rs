@@ -9,13 +9,13 @@
 //! uses evidence-based conditionals that account for uncertainty:
 //!
 //! ```rust
-//! use uncertain_rs::Uncertain;
+//! use uncertain_rs::{Uncertain, operations::Comparison};
 //!
 //! // Create uncertain values from probability distributions
 //! let speed = Uncertain::normal(55.2, 5.0); // GPS reading with ±5 mph error
 //!
 //! // Evidence-based conditional (returns Uncertain<bool>)
-//! let speeding_evidence = speed.gt(60.0);
+//! let speeding_evidence = Comparison::gt(&speed, 60.0);
 //!
 //! // Convert evidence to decision with confidence level
 //! if speeding_evidence.probability_exceeds(0.95) {
