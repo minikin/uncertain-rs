@@ -44,6 +44,3 @@ pub use hypothesis::HypothesisResult;
 pub use uncertain::Uncertain;
 
 pub use operations::{Arithmetic, Comparison, LogicalOps};
-
-// #[cfg(test)]
-// mod tests;
