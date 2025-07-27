@@ -1,7 +1,7 @@
 #![allow(clippy::cast_precision_loss)]
 
-use crate::traits::Shareable;
 use crate::Uncertain;
+use crate::traits::Shareable;
 use rand::prelude::*;
 use rand::random;
 use rand::rng;

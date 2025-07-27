@@ -1,7 +1,7 @@
 #![allow(clippy::cast_precision_loss)]
 
-use crate::traits::Shareable;
 use crate::Uncertain;
+use crate::traits::Shareable;
 
 /// Trait for comparison operations that return uncertain boolean evidence
 ///

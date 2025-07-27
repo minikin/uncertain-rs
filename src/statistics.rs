@@ -4,8 +4,8 @@
     clippy::cast_sign_loss
 )]
 
-use crate::traits::Shareable;
 use crate::Uncertain;
+use crate::traits::Shareable;
 use std::collections::HashMap;
 use std::hash::Hash;
 

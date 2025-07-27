@@ -1,7 +1,7 @@
 #![allow(clippy::cast_precision_loss)]
 
-use crate::traits::Shareable;
 use crate::Uncertain;
+use crate::traits::Shareable;
 
 /// Trait for logical operations on uncertain boolean values
 pub trait LogicalOps {

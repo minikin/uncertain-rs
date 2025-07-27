@@ -1,5 +1,5 @@
-use crate::{Uncertain, computation::ComputationNode};
 use crate::traits::Shareable;
+use crate::{Uncertain, computation::ComputationNode};
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 /// Trait alias for types that support arithmetic operations
