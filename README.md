@@ -1,6 +1,7 @@
 # uncertain-rs
 
 [![CI](https://github.com/minikin/uncertain-rs/workflows/CI/badge.svg)](https://github.com/minikin/uncertain-rs/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/minikin/uncertain-rs/graph/badge.svg?token=IKjgVbFAQk)](https://codecov.io/gh/minikin/uncertain-rs)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A Rust library for uncertainty-aware programming, implementing the approach from
