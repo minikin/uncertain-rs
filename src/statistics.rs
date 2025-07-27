@@ -4,6 +4,7 @@
     clippy::cast_sign_loss
 )]
 
+use crate::traits::Shareable;
 use crate::Uncertain;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -11,7 +12,7 @@ use std::hash::Hash;
 /// Statistical analysis methods for uncertain values
 impl<T> Uncertain<T>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Shareable,
 {
     /// Estimates the mode (most frequent value) of the distribution
     ///

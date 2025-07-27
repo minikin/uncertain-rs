@@ -1,4 +1,5 @@
 use crate::operations::{Arithmetic, arithmetic::BinaryOperation};
+use crate::traits::Shareable;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -96,7 +97,7 @@ pub enum UnaryOperation<T> {
 
 impl<T> ComputationNode<T>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Shareable,
 {
     /// Evaluates the computation graph node with memoization context
     ///
@@ -354,7 +355,7 @@ impl ComputationNode<bool> {
 // Add a specialized method for evaluating conditionals with arithmetic return types
 impl<T> ComputationNode<T>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Shareable,
 {
     /// Evaluates conditional nodes where condition is bool and branches return T
     pub fn evaluate_conditional_with_arithmetic(&self, context: &mut SampleContext) -> T
@@ -387,7 +388,7 @@ impl GraphOptimizer {
     #[must_use]
     pub fn optimize<T>(node: ComputationNode<T>) -> ComputationNode<T>
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
     {
         // Apply optimizations in order
         let node = Self::eliminate_identity_operations(node);
@@ -397,7 +398,7 @@ impl GraphOptimizer {
     /// Eliminates identity operations like `x + 0` or `x * 1`
     fn eliminate_identity_operations<T>(node: ComputationNode<T>) -> ComputationNode<T>
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
     {
         // This is a simplified version - in practice, you'd need more sophisticated
         // pattern matching and constant detection
@@ -407,7 +408,7 @@ impl GraphOptimizer {
     /// Performs constant folding for compile-time evaluation of constant expressions
     fn constant_folding<T>(node: ComputationNode<T>) -> ComputationNode<T>
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
     {
         // This is a simplified version - in practice, you'd detect constant
         // sub-expressions and pre-evaluate them
@@ -423,7 +424,7 @@ impl GraphVisualizer {
     #[must_use]
     pub fn to_dot<T>(node: &ComputationNode<T>) -> String
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
     {
         let mut dot = String::from("digraph G {\n");
         let mut node_id = 0;
@@ -434,7 +435,7 @@ impl GraphVisualizer {
 
     fn add_node_to_dot<T>(node: &ComputationNode<T>, dot: &mut String, node_id: &mut usize) -> usize
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
     {
         use std::fmt::Write;
         let current_id = *node_id;
@@ -491,7 +492,7 @@ impl GraphVisualizer {
     /// Prints a text-based representation of the computation graph
     pub fn print_tree<T>(node: &ComputationNode<T>, indent: usize)
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
     {
         let prefix = "  ".repeat(indent);
 

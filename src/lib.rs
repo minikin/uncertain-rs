@@ -38,9 +38,11 @@ pub mod distributions;
 pub mod hypothesis;
 pub mod operations;
 pub mod statistics;
+pub mod traits;
 pub mod uncertain;
 
 pub use hypothesis::HypothesisResult;
+pub use traits::Shareable;
 pub use uncertain::Uncertain;
 
 pub use operations::{Arithmetic, Comparison, LogicalOps};

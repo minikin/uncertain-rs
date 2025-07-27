@@ -1,5 +1,6 @@
 #![allow(clippy::cast_precision_loss)]
 
+use crate::traits::Shareable;
 use crate::Uncertain;
 
 /// Trait for comparison operations that return uncertain boolean evidence
@@ -34,7 +35,7 @@ pub trait Comparison<T> {
 
 impl<T> Comparison<T> for Uncertain<T>
 where
-    T: PartialOrd + PartialEq + Clone + Send + Sync + 'static,
+    T: PartialOrd + PartialEq + Shareable,
 {
     /// Greater than comparison
     ///
@@ -103,7 +104,7 @@ where
 // Comparisons between two uncertain values
 impl<T> Uncertain<T>
 where
-    T: PartialOrd + PartialEq + Clone + Send + Sync + 'static,
+    T: PartialOrd + PartialEq + Shareable,
 {
     /// Compare two uncertain values for greater than
     ///

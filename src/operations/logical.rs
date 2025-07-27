@@ -1,5 +1,6 @@
 #![allow(clippy::cast_precision_loss)]
 
+use crate::traits::Shareable;
 use crate::Uncertain;
 
 /// Trait for logical operations on uncertain boolean values
@@ -119,7 +120,7 @@ impl Uncertain<bool> {
     #[must_use]
     pub fn if_then_else<T, F1, F2>(&self, if_true: F1, if_false: F2) -> Uncertain<T>
     where
-        T: Clone + Send + Sync + 'static,
+        T: Shareable,
         F1: Fn() -> Uncertain<T> + Send + Sync + 'static,
         F2: Fn() -> Uncertain<T> + Send + Sync + 'static,
     {

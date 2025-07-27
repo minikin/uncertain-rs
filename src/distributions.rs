@@ -1,5 +1,6 @@
 #![allow(clippy::cast_precision_loss)]
 
+use crate::traits::Shareable;
 use crate::Uncertain;
 use rand::prelude::*;
 use rand::random;
@@ -9,7 +10,7 @@ use std::f64::consts::PI;
 
 impl<T> Uncertain<T>
 where
-    T: Clone + Send + Sync + 'static,
+    T: Shareable,
 {
     /// Creates a point-mass distribution (certain value)
     ///
