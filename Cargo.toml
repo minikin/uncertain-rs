@@ -2,7 +2,7 @@
 name = "uncertain-rs"
 version = "0.1.0"
 edition = "2024"
-authors = ["Oleksandr Prokhorenko <your.email@example.com>"]
+authors = ["Oleksandr Prokhorenko <warbles.lieu_04@icloud.com>"]
 license = "MIT"
 description = "A Rust library for uncertainty-aware programming, implementing the approach from 'Uncertain<T>: A First-Order Type for Uncertain Data'"
 homepage = "https://github.com/minikin/uncertain-rs"
