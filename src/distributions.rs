@@ -356,7 +356,14 @@ impl Uncertain<bool> {
 // Integer distributions
 impl<T> Uncertain<T>
 where
-    T: Clone + Send + Sync + From<u32> + std::ops::AddAssign + Default + 'static,
+    T: Clone
+        + Send
+        + Sync
+        + From<u32>
+        + std::ops::AddAssign
+        + std::ops::Sub<Output = T>
+        + Default
+        + 'static,
 {
     /// Creates a binomial distribution
     ///
@@ -409,8 +416,8 @@ where
                 }
             }
 
-            // Return k - 1, but this is simplified for the generic case
-            k
+            // Return k - 1 per Knuth's algorithm
+            k - T::from(1)
         })
     }
 
