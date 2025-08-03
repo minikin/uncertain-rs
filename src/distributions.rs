@@ -483,7 +483,217 @@ mod tests {
         let categorical = Uncertain::categorical(&probs).unwrap();
         let samples: Vec<&str> = categorical.take_samples(1000);
 
-        // All samples should be valid categories
         assert!(samples.iter().all(|&x| ["a", "b", "c"].contains(&x)));
+    }
+
+    #[test]
+    fn test_exponential_distribution() {
+        let exponential = Uncertain::exponential(2.0);
+        let samples: Vec<f64> = exponential.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| x >= 0.0));
+
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((mean - 0.5).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_log_normal_distribution() {
+        let log_normal = Uncertain::log_normal(0.0, 1.0);
+        let samples: Vec<f64> = log_normal.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| x > 0.0));
+    }
+
+    #[test]
+    fn test_beta_distribution() {
+        let beta = Uncertain::beta(2.0, 5.0);
+        let samples: Vec<f64> = beta.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| (0.0..=1.0).contains(&x)));
+    }
+
+    #[test]
+    fn test_gamma_distribution() {
+        let gamma = Uncertain::gamma(2.0, 1.0);
+        let samples: Vec<f64> = gamma.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| x >= 0.0));
+    }
+
+    #[test]
+    fn test_binomial_distribution() {
+        let binomial: Uncertain<u32> = Uncertain::binomial(10, 0.5);
+        let samples: Vec<u32> = binomial.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| x <= 10));
+
+        let mean = f64::from(samples.iter().sum::<u32>()) / samples.len() as f64;
+        assert!((mean - 5.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_poisson_distribution() {
+        let poisson: Uncertain<u32> = Uncertain::poisson(3.0);
+        let samples: Vec<u32> = poisson.take_samples(1000);
+
+        let mean = f64::from(samples.iter().sum::<u32>()) / samples.len() as f64;
+        assert!((mean - 3.0).abs() < 1.0);
+    }
+
+    #[test]
+    fn test_geometric_distribution() {
+        let geometric: Uncertain<u32> = Uncertain::geometric(0.2);
+        let samples: Vec<u32> = geometric.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| x >= 1));
+
+        let mean = f64::from(samples.iter().sum::<u32>()) / samples.len() as f64;
+        assert!((mean - 5.0).abs() < 2.0);
+    }
+
+    #[test]
+    fn test_mixture_distribution() {
+        let normal1 = Uncertain::normal(0.0, 1.0);
+        let normal2 = Uncertain::normal(10.0, 1.0);
+        let mixture = Uncertain::mixture(vec![normal1, normal2], Some(vec![0.5, 0.5])).unwrap();
+
+        let samples: Vec<f64> = mixture.take_samples(1000);
+
+        let low_count = samples.iter().filter(|&&x| x < 5.0).count();
+        let high_count = samples.iter().filter(|&&x| x > 5.0).count();
+
+        assert!(low_count > 100);
+        assert!(high_count > 100);
+    }
+
+    #[test]
+    fn test_mixture_single_component() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let mixture = Uncertain::mixture(vec![normal], None).unwrap();
+        let samples: Vec<f64> = mixture.take_samples(100);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((mean - 0.0).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_mixture_uniform_weights() {
+        let normal1 = Uncertain::normal(0.0, 1.0);
+        let normal2 = Uncertain::normal(5.0, 1.0);
+        let mixture = Uncertain::mixture(vec![normal1, normal2], None).unwrap();
+        let _samples: Vec<f64> = mixture.take_samples(100);
+    }
+
+    #[test]
+    fn test_empirical_distribution() {
+        let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let empirical = Uncertain::empirical(data.clone()).unwrap();
+        let samples: Vec<f64> = empirical.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| data.contains(&x)));
+    }
+
+    #[test]
+    fn test_mixture_empty_components() {
+        let result: Result<Uncertain<f64>, &str> = Uncertain::mixture(vec![], None);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "At least one component required");
+    }
+
+    #[test]
+    fn test_mixture_mismatched_weights() {
+        let normal1 = Uncertain::normal(0.0, 1.0);
+        let normal2 = Uncertain::normal(1.0, 1.0);
+        let result = Uncertain::mixture(vec![normal1, normal2], Some(vec![0.5]));
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err(),
+            "Weights count must match components count"
+        );
+    }
+
+    #[test]
+    fn test_empirical_empty_data() {
+        let result: Result<Uncertain<f64>, &str> = Uncertain::empirical(vec![]);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Data cannot be empty");
+    }
+
+    #[test]
+    fn test_categorical_empty_probabilities() {
+        let probs: HashMap<&str, f64> = HashMap::new();
+        let result = Uncertain::categorical(&probs);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "Probabilities cannot be empty");
+    }
+
+    #[test]
+    fn test_categorical_with_unnormalized_probabilities() {
+        let mut probs = HashMap::new();
+        probs.insert("a", 2.0);
+        probs.insert("b", 3.0);
+        probs.insert("c", 5.0);
+
+        let categorical = Uncertain::categorical(&probs).unwrap();
+        let samples: Vec<&str> = categorical.take_samples(1000);
+
+        assert!(samples.iter().all(|&x| ["a", "b", "c"].contains(&x)));
+    }
+
+    #[test]
+    fn test_normal_distribution_edge_cases() {
+        let normal_zero_std = Uncertain::normal(5.0, 0.0);
+        let samples: Vec<f64> = normal_zero_std.take_samples(10);
+        assert!(samples.iter().all(|&x| (x - 5.0).abs() < 0.01));
+
+        let normal_negative = Uncertain::normal(-10.0, 2.0);
+        let samples: Vec<f64> = normal_negative.take_samples(1000);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((mean - (-10.0)).abs() < 0.5);
+    }
+
+    #[test]
+    fn test_uniform_edge_cases() {
+        let uniform_point = Uncertain::uniform(5.0, 5.0);
+        let samples: Vec<f64> = uniform_point.take_samples(10);
+        assert!(samples.iter().all(|&x| (x - 5.0).abs() < f64::EPSILON));
+
+        let uniform_negative = Uncertain::uniform(-10.0, -5.0);
+        let samples: Vec<f64> = uniform_negative.take_samples(100);
+        assert!(samples.iter().all(|&x| (-10.0..=-5.0).contains(&x)));
+    }
+
+    #[test]
+    fn test_bernoulli_edge_cases() {
+        let bernoulli_false = Uncertain::bernoulli(0.0);
+        let samples: Vec<bool> = bernoulli_false.take_samples(100);
+        assert!(samples.iter().all(|&x| !x));
+
+        let bernoulli_true = Uncertain::bernoulli(1.0);
+        let samples: Vec<bool> = bernoulli_true.take_samples(100);
+        assert!(samples.iter().all(|&x| x));
+    }
+
+    #[test]
+    fn test_exponential_edge_cases() {
+        let exponential_high_rate = Uncertain::exponential(100.0);
+        let samples: Vec<f64> = exponential_high_rate.take_samples(100);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!(mean < 0.1);
+    }
+
+    #[test]
+    fn test_binomial_edge_cases() {
+        let binomial_zero: Uncertain<u32> = Uncertain::binomial(0, 0.5);
+        let samples: Vec<u32> = binomial_zero.take_samples(10);
+        assert!(samples.iter().all(|&x| x == 0));
+
+        let binomial_p_zero: Uncertain<u32> = Uncertain::binomial(10, 0.0);
+        let samples: Vec<u32> = binomial_p_zero.take_samples(10);
+        assert!(samples.iter().all(|&x| x == 0));
+
+        let binomial_p_one: Uncertain<u32> = Uncertain::binomial(10, 1.0);
+        let samples: Vec<u32> = binomial_p_one.take_samples(10);
+        assert!(samples.iter().all(|&x| x == 10));
     }
 }
