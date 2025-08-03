@@ -7,6 +7,18 @@
 A Rust library for uncertainty-aware programming, implementing the approach from
 "Uncertain<T>: A First-Order Type for Uncertain Data" by Bornholt, Mytkowicz, and McKinley.
 
+- [uncertain-rs](#uncertain-rs)
+  - [Core Concept: Evidence-Based Conditionals](#core-concept-evidence-based-conditionals)
+  - [Features](#features)
+  - [Installation](#installation)
+  - [Quick Start](#quick-start)
+  - [TODO's](#todos)
+    - [High Priority:](#high-priority)
+    - [Medium Priority:](#medium-priority)
+    - [Lower Priority:](#lower-priority)
+  - [License](#license)
+  - [Contributing](#contributing)
+
 ## Core Concept: Evidence-Based Conditionals
 
 Instead of treating uncertain data as exact values (which leads to bugs),
@@ -71,6 +83,28 @@ fn main() {
 ```
 
 For more examples, see the [examples directory](examples).
+
+## TODO's
+
+### High Priority:
+
+- Fix API consistency: Ensure `probability_exceeds()` method works as
+  shown in README
+- Add more practical examples: Financial risk, quality control, A/B testing
+- Performance optimizations: Memoization and caching for complex
+  computations
+
+### Medium Priority:
+
+- Additional distributions: Weibull, Pareto, Chi-squared, t-distribution
+- Correlation support
+- For dependent uncertain variables
+- Builder pattern: for complex distribution configuration
+
+### Lower Priority:
+
+- Visualization support: Histogram generation and CSV export
+- Better documentation: More cross-references to the original paper
 
 ## License
 
