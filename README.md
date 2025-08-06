@@ -88,8 +88,6 @@ For more examples, see the [examples directory](examples).
 
 ### High Priority:
 
-- Fix API consistency: Ensure `probability_exceeds()` method works as
-  shown in README
 - Add more practical examples: Financial risk, quality control, A/B testing
 - Performance optimizations: Memoization and caching for complex
   computations

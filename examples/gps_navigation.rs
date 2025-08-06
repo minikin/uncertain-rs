@@ -66,7 +66,7 @@ fn main() {
 
     // Probability analysis for arrival predictions
     let late_threshold = 10.0; // minutes
-    let will_be_late = travel_time_minutes.map(move |t| t > late_threshold);
+    let will_be_late = travel_time_minutes.gt(late_threshold);
 
     let late_samples: Vec<bool> = will_be_late.take_samples(1000);
     let late_probability = late_samples.iter().filter(|&&x| x).count() as f64 / 1000.0;

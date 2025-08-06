@@ -204,6 +204,68 @@ where
     }
 }
 
+impl<T> Uncertain<T>
+where
+    T: Shareable + PartialOrd + PartialEq + Copy,
+{
+    /// Returns uncertain boolean evidence that this value is greater than threshold
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let speed = Uncertain::normal(55.2, 5.0);
+    /// let speeding_evidence = speed.gt(60.0);
+    ///
+    /// if speeding_evidence.probability_exceeds(0.95) {
+    ///     println!("Issue speeding ticket");
+    /// }
+    /// ```
+    #[must_use]
+    pub fn gt(&self, threshold: T) -> Uncertain<bool> {
+        let sample_fn = self.sample_fn.clone();
+        Uncertain::new(move || sample_fn() > threshold)
+    }
+
+    /// Returns uncertain boolean evidence that this value is less than threshold
+    #[must_use]
+    pub fn lt(&self, threshold: T) -> Uncertain<bool> {
+        let sample_fn = self.sample_fn.clone();
+        Uncertain::new(move || sample_fn() < threshold)
+    }
+
+    /// Returns uncertain boolean evidence that this value is greater than or equal to threshold
+    #[must_use]
+    pub fn ge(&self, threshold: T) -> Uncertain<bool> {
+        let sample_fn = self.sample_fn.clone();
+        Uncertain::new(move || sample_fn() >= threshold)
+    }
+
+    /// Returns uncertain boolean evidence that this value is less than or equal to threshold
+    #[must_use]
+    pub fn le(&self, threshold: T) -> Uncertain<bool> {
+        let sample_fn = self.sample_fn.clone();
+        Uncertain::new(move || sample_fn() <= threshold)
+    }
+
+    /// Returns uncertain boolean evidence that this value equals threshold
+    ///
+    /// Note: For floating point types, exact equality is rarely meaningful.
+    /// Consider using range-based comparisons instead.
+    #[must_use]
+    pub fn eq_value(&self, threshold: T) -> Uncertain<bool> {
+        let sample_fn = self.sample_fn.clone();
+        Uncertain::new(move || sample_fn() == threshold)
+    }
+
+    /// Returns uncertain boolean evidence that this value does not equal threshold
+    #[must_use]
+    pub fn ne_value(&self, threshold: T) -> Uncertain<bool> {
+        let sample_fn = self.sample_fn.clone();
+        Uncertain::new(move || sample_fn() != threshold)
+    }
+}
+
 impl<T> std::cmp::PartialEq for Uncertain<T>
 where
     T: Shareable + PartialEq,
@@ -440,5 +502,62 @@ mod tests {
 
         let sample = transformed.sample();
         assert!((0.0..=100.0).contains(&sample));
+    }
+
+    #[test]
+    fn test_gt_method_api() {
+        let speed = Uncertain::new(|| 65.0);
+        let speeding_evidence = speed.gt(60.0);
+        assert!(speeding_evidence.sample()); // 65 > 60
+    }
+
+    #[test]
+    fn test_lt_method_api() {
+        let temperature = Uncertain::new(|| -5.0);
+        let freezing_evidence = temperature.lt(0.0);
+        assert!(freezing_evidence.sample()); // -5 < 0
+    }
+
+    #[test]
+    fn test_ge_method_api() {
+        let value = Uncertain::new(|| 10.0);
+        let evidence = value.ge(10.0);
+        assert!(evidence.sample()); // 10 >= 10
+    }
+
+    #[test]
+    fn test_le_method_api() {
+        let value = Uncertain::new(|| 5.0);
+        let evidence = value.le(10.0);
+        assert!(evidence.sample()); // 5 <= 10
+    }
+
+    #[test]
+    fn test_eq_value_method_api() {
+        let value = Uncertain::new(|| 42);
+        let evidence = value.eq_value(42);
+        assert!(evidence.sample()); // 42 == 42
+    }
+
+    #[test]
+    fn test_ne_value_method_api() {
+        let value = Uncertain::new(|| 42);
+        let evidence = value.ne_value(0);
+        assert!(evidence.sample()); // 42 != 0
+    }
+
+    #[test]
+    fn test_readme_example_api() {
+        // Test the exact API shown in the README
+        let speed = Uncertain::normal(55.2, 5.0);
+        let speeding_evidence = speed.gt(60.0);
+
+        // This should compile and work (the exact API from README)
+        let _result = speeding_evidence.probability_exceeds(0.95);
+
+        // Test with a value that's definitely over the threshold
+        let high_speed = Uncertain::point(70.0);
+        let high_speed_evidence = high_speed.gt(60.0);
+        assert!(high_speed_evidence.probability_exceeds(0.95));
     }
 }

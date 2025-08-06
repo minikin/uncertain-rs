@@ -61,7 +61,7 @@ fn main() {
     println!("\n🔬 Risk Factor Analysis:");
 
     // Hypertension risk (blood pressure > 140 mmHg)
-    let hypertension_evidence = blood_pressure.map(|bp| bp > HYPERTENSION_THRESHOLD);
+    let hypertension_evidence = blood_pressure.gt(HYPERTENSION_THRESHOLD);
     let hypertension_prob = calculate_probability(&hypertension_evidence);
     println!(
         "   Hypertension risk: {:.1}% confidence",
@@ -69,7 +69,7 @@ fn main() {
     );
 
     // High cholesterol risk (> 200 mg/dL)
-    let high_cholesterol_evidence = cholesterol.map(|c| c > HIGH_CHOLESTEROL_THRESHOLD);
+    let high_cholesterol_evidence = cholesterol.gt(HIGH_CHOLESTEROL_THRESHOLD);
     let cholesterol_prob = calculate_probability(&high_cholesterol_evidence);
     println!(
         "   High cholesterol risk: {:.1}% confidence",
@@ -77,12 +77,12 @@ fn main() {
     );
 
     // Diabetes risk (glucose > 125 mg/dL)
-    let diabetes_evidence = glucose.map(|g| g > DIABETES_THRESHOLD);
+    let diabetes_evidence = glucose.gt(DIABETES_THRESHOLD);
     let diabetes_prob = calculate_probability(&diabetes_evidence);
     println!("   Diabetes risk: {:.1}% confidence", diabetes_prob * 100.0);
 
     // Obesity risk (BMI > 30)
-    let obesity_evidence = bmi.map(|b| b > OBESITY_BMI_THRESHOLD);
+    let obesity_evidence = bmi.gt(OBESITY_BMI_THRESHOLD);
     let obesity_prob = calculate_probability(&obesity_evidence);
     println!("   Obesity risk: {:.1}% confidence", obesity_prob * 100.0);
 
@@ -124,9 +124,9 @@ fn main() {
     let mean_risk = risk_samples.iter().sum::<f64>() / risk_samples.len() as f64;
 
     // Risk categories based on combined score
-    let low_risk = cv_risk_score.map(|score| score < 2.0);
+    let low_risk = cv_risk_score.lt(2.0);
     let moderate_risk = cv_risk_score.map(|score| (2.0..4.0).contains(&score));
-    let high_risk = cv_risk_score.map(|score| score >= 4.0);
+    let high_risk = cv_risk_score.ge(4.0);
 
     let low_prob = calculate_probability(&low_risk);
     let moderate_prob = calculate_probability(&moderate_risk);
