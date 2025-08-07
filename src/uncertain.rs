@@ -11,6 +11,8 @@ use std::sync::Arc;
 /// for lazy evaluation and proper uncertainty-aware conditionals.
 #[derive(Clone)]
 pub struct Uncertain<T> {
+    /// Unique identifier for caching purposes
+    pub(crate) id: uuid::Uuid,
     /// The sampling function that generates values from this distribution
     pub sample_fn: Arc<dyn Fn() -> T + Send + Sync>,
     /// The computation graph node for lazy evaluation
@@ -37,12 +39,14 @@ where
         F: Fn() -> T + Send + Sync + 'static,
     {
         let sampler = Arc::new(sampler);
+        let id = uuid::Uuid::new_v4();
         let node = ComputationNode::Leaf {
-            id: uuid::Uuid::new_v4(),
+            id,
             sample: sampler.clone(),
         };
 
         Self {
+            id,
             sample_fn: sampler,
             node,
         }
@@ -58,8 +62,21 @@ where
             let mut context = SampleContext::new();
             node_clone.evaluate_conditional_with_arithmetic(&mut context)
         });
+        let id = uuid::Uuid::new_v4();
 
-        Self { sample_fn, node }
+        Self {
+            id,
+            sample_fn,
+            node,
+        }
+    }
+
+    /// Get the unique identifier for this uncertain value
+    ///
+    /// This is primarily used for caching purposes.
+    #[must_use]
+    pub fn id(&self) -> uuid::Uuid {
+        self.id
     }
 
     /// Generate a sample from this distribution
@@ -170,6 +187,26 @@ where
     #[must_use]
     pub fn take_samples(&self, count: usize) -> Vec<T> {
         self.samples().take(count).collect()
+    }
+}
+
+impl Uncertain<f64> {
+    /// Take samples with caching for better performance on repeated requests
+    ///
+    /// This is especially useful for expensive computations that might be called
+    /// multiple times with the same sample count.
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let gamma = Uncertain::gamma(2.0, 1.0);
+    /// let samples = gamma.take_samples_cached(1000); // Cached for reuse
+    /// ```
+    #[must_use]
+    pub fn take_samples_cached(&self, count: usize) -> Vec<f64> {
+        crate::cache::dist_cache()
+            .get_or_compute_samples(self.id, count, || self.samples().take(count).collect())
     }
 }
 
