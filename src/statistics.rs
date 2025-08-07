@@ -5,6 +5,7 @@
 )]
 
 use crate::Uncertain;
+use crate::cache;
 use crate::traits::Shareable;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -111,6 +112,8 @@ where
 {
     /// Calculates the expected value (mean) of the distribution
     ///
+    /// This method uses caching to avoid recomputing the same result.
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -121,12 +124,16 @@ where
     /// ```
     #[must_use]
     pub fn expected_value(&self, sample_count: usize) -> f64 {
-        let samples = self.take_samples(sample_count);
-        let sum: f64 = samples.into_iter().map(Into::into).sum();
-        sum / sample_count as f64
+        cache::stats_cache().get_or_compute_expected_value(self.id, sample_count, || {
+            let samples = self.take_samples(sample_count);
+            let sum: f64 = samples.into_iter().map(Into::into).sum();
+            sum / sample_count as f64
+        })
     }
 
     /// Calculates the variance of the distribution
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Example
     /// ```rust
@@ -138,18 +145,22 @@ where
     /// ```
     #[must_use]
     pub fn variance(&self, sample_count: usize) -> f64 {
-        let samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_variance(self.id, sample_count, || {
+            let samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
 
-        samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64
+        })
     }
 
     /// Calculates the standard deviation of the distribution
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Example
     /// ```rust
@@ -161,10 +172,13 @@ where
     /// ```
     #[must_use]
     pub fn standard_deviation(&self, sample_count: usize) -> f64 {
-        self.variance(sample_count).sqrt()
+        cache::stats_cache()
+            .get_or_compute_std_dev(self.id, sample_count, || self.variance(sample_count).sqrt())
     }
 
     /// Calculates the skewness of the distribution
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Example
     /// ```rust
@@ -176,28 +190,32 @@ where
     /// ```
     #[must_use]
     pub fn skewness(&self, sample_count: usize) -> f64 {
-        let samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_skewness(self.id, sample_count, || {
+            let samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
-        let std_dev = self.standard_deviation(sample_count);
+            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+            let std_dev = self.standard_deviation(sample_count);
 
-        if std_dev == 0.0 {
-            return 0.0;
-        }
+            if std_dev == 0.0 {
+                return 0.0;
+            }
 
-        let n = samples.len() as f64;
-        samples
-            .iter()
-            .map(|x| ((x - mean) / std_dev).powi(3))
-            .sum::<f64>()
-            / n
+            let n = samples.len() as f64;
+            samples
+                .iter()
+                .map(|x| ((x - mean) / std_dev).powi(3))
+                .sum::<f64>()
+                / n
+        })
     }
 
     /// Calculates the excess kurtosis of the distribution
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Example
     /// ```rust
@@ -209,27 +227,29 @@ where
     /// ```
     #[must_use]
     pub fn kurtosis(&self, sample_count: usize) -> f64 {
-        let samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_kurtosis(self.id, sample_count, || {
+            let samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
-        let std_dev = self.standard_deviation(sample_count);
+            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+            let std_dev = self.standard_deviation(sample_count);
 
-        if std_dev == 0.0 {
-            return 0.0;
-        }
+            if std_dev == 0.0 {
+                return 0.0;
+            }
 
-        let n = samples.len() as f64;
-        let kurt = samples
-            .iter()
-            .map(|x| ((x - mean) / std_dev).powi(4))
-            .sum::<f64>()
-            / n;
+            let n = samples.len() as f64;
+            let kurt = samples
+                .iter()
+                .map(|x| ((x - mean) / std_dev).powi(4))
+                .sum::<f64>()
+                / n;
 
-        kurt - 3.0 // Excess kurtosis (subtract 3 for normal distribution baseline)
+            kurt - 3.0 // Excess kurtosis (subtract 3 for normal distribution baseline)
+        })
     }
 }
 
@@ -239,6 +259,8 @@ where
     T: Clone + Send + Sync + PartialOrd + Into<f64> + 'static,
 {
     /// Calculates confidence interval bounds
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Panics
     ///
@@ -254,27 +276,36 @@ where
     /// ```
     #[must_use]
     pub fn confidence_interval(&self, confidence: f64, sample_count: usize) -> (f64, f64) {
-        let mut samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_confidence_interval(
+            self.id,
+            sample_count,
+            confidence,
+            || {
+                let mut samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
 
-        samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        let alpha = 1.0 - confidence;
-        let samples_len = samples.len();
-        let lower_idx = ((alpha / 2.0) * samples_len as f64).floor() as usize;
-        let upper_idx =
-            (((1.0 - alpha / 2.0) * samples_len as f64).floor() as usize).saturating_sub(1);
+                let alpha = 1.0 - confidence;
+                let samples_len = samples.len();
+                let lower_idx = ((alpha / 2.0) * samples_len as f64).floor() as usize;
+                let upper_idx =
+                    (((1.0 - alpha / 2.0) * samples_len as f64).floor() as usize).saturating_sub(1);
 
-        let lower_idx = lower_idx.min(samples.len() - 1);
-        let upper_idx = upper_idx.min(samples.len() - 1);
+                let lower_idx = lower_idx.min(samples.len() - 1);
+                let upper_idx = upper_idx.min(samples.len() - 1);
 
-        (samples[lower_idx], samples[upper_idx])
+                (samples[lower_idx], samples[upper_idx])
+            },
+        )
     }
 
     /// Estimates the cumulative distribution function (CDF) at a given value
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Example
     /// ```rust
@@ -286,17 +317,21 @@ where
     /// ```
     #[must_use]
     pub fn cdf(&self, value: f64, sample_count: usize) -> f64 {
-        let samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_cdf(self.id, sample_count, value, || {
+            let samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        let count = samples.iter().filter(|&&x| x <= value).count();
-        count as f64 / samples.len() as f64
+            let count = samples.iter().filter(|&&x| x <= value).count();
+            count as f64 / samples.len() as f64
+        })
     }
 
     /// Estimates quantiles of the distribution
+    ///
+    /// This method uses caching to avoid recomputing the same result.
     ///
     /// # Panics
     ///
@@ -312,18 +347,20 @@ where
     /// ```
     #[must_use]
     pub fn quantile(&self, q: f64, sample_count: usize) -> f64 {
-        let mut samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_quantile(self.id, sample_count, q, || {
+            let mut samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        let index = (q * samples.len().saturating_sub(1) as f64).floor() as usize;
-        let index = index.min(samples.len() - 1);
+            let index = (q * samples.len().saturating_sub(1) as f64).floor() as usize;
+            let index = index.min(samples.len() - 1);
 
-        samples[index]
+            samples[index]
+        })
     }
 
     /// Calculates the interquartile range (IQR)
@@ -377,6 +414,8 @@ where
 impl Uncertain<f64> {
     /// Estimates the probability density function (PDF) using kernel density estimation
     ///
+    /// This method uses caching to avoid recomputing the same result.
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -386,17 +425,19 @@ impl Uncertain<f64> {
     /// ```
     #[must_use]
     pub fn pdf_kde(&self, x: f64, sample_count: usize, bandwidth: f64) -> f64 {
-        let samples = self.take_samples(sample_count);
+        cache::dist_cache().get_or_compute_pdf_kde(self.id, sample_count, x, bandwidth, || {
+            let samples = self.take_samples(sample_count);
 
-        let kernel_sum: f64 = samples
-            .iter()
-            .map(|&xi| {
-                let z = (x - xi) / bandwidth;
-                (-0.5 * z * z).exp()
-            })
-            .sum();
+            let kernel_sum: f64 = samples
+                .iter()
+                .map(|&xi| {
+                    let z = (x - xi) / bandwidth;
+                    (-0.5 * z * z).exp()
+                })
+                .sum();
 
-        kernel_sum / (sample_count as f64 * bandwidth * (2.0 * std::f64::consts::PI).sqrt())
+            kernel_sum / (sample_count as f64 * bandwidth * (2.0 * std::f64::consts::PI).sqrt())
+        })
     }
 
     /// Estimates the log-likelihood of a value using kernel density estimation

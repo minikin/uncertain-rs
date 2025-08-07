@@ -16,3 +16,8 @@ uuid = { version = "1.0", features = ["v4"] }
 
 [dev-dependencies]
 approx = "0.5"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "performance_benchmarks"
+harness = false

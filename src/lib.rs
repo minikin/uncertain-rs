@@ -33,6 +33,7 @@
 //! - **Rich distributions**: Normal, uniform, exponential, binomial, categorical, etc.
 //! - **Statistical analysis**: Mean, std dev, confidence intervals, CDF, etc.
 
+pub mod cache;
 pub mod computation;
 pub mod distributions;
 pub mod hypothesis;

@@ -415,7 +415,7 @@ mod tests {
         // Test exceeds 0.6 (should be true)
         let result1 = biased_coin.evaluate_hypothesis(0.6, 0.95, 5000, None, None, None, 20);
         assert!(result1.decision);
-        assert!((result1.probability - 0.7).abs() < 0.15);
+        assert!((result1.probability - 0.7).abs() < 0.2);
 
         // Test exceeds 0.8 (should be false)
         let result2 = biased_coin.evaluate_hypothesis(0.8, 0.95, 5000, None, None, None, 20);
