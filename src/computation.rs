@@ -776,4 +776,317 @@ mod tests {
         assert!(sample1 > -50.0 && sample1 < 150.0);
         assert!(sample2 > -50.0 && sample2 < 150.0);
     }
+
+    #[test]
+    fn test_sample_context_clear() {
+        let mut context = SampleContext::new();
+        let id = uuid::Uuid::new_v4();
+
+        context.set_value(id, 42.0);
+        assert_eq!(context.len(), 1);
+        assert!(!context.is_empty());
+
+        context.clear();
+        assert_eq!(context.len(), 0);
+        assert!(context.is_empty());
+        assert_eq!(context.get_value::<f64>(&id), None);
+    }
+
+    #[test]
+    fn test_sample_context_default() {
+        let context = SampleContext::default();
+        assert!(context.is_empty());
+        assert_eq!(context.len(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "BinaryOp evaluation requires arithmetic trait bounds")]
+    fn test_evaluate_panic_on_binary_op() {
+        let left = ComputationNode::leaf(|| 1.0);
+        let right = ComputationNode::leaf(|| 2.0);
+        let binary_op = ComputationNode::binary_op(left, right, BinaryOperation::Add);
+
+        let mut context = SampleContext::new();
+        binary_op.evaluate(&mut context);
+    }
+
+    #[test]
+    #[should_panic(expected = "Conditional evaluation requires specific handling")]
+    fn test_evaluate_panic_on_conditional() {
+        let condition = ComputationNode::leaf(|| true);
+        let if_true = ComputationNode::leaf(|| 10.0);
+        let if_false = ComputationNode::leaf(|| 20.0);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let mut context = SampleContext::new();
+        conditional.evaluate(&mut context);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Conditional evaluation with bool condition not supported in arithmetic context"
+    )]
+    fn test_evaluate_arithmetic_panic_on_conditional() {
+        let condition = ComputationNode::leaf(|| true);
+        let if_true = ComputationNode::leaf(|| 10.0);
+        let if_false = ComputationNode::leaf(|| 20.0);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let mut context = SampleContext::new();
+        conditional.evaluate_arithmetic(&mut context);
+    }
+
+    #[test]
+    #[should_panic(expected = "Boolean binary operations not implemented")]
+    fn test_evaluate_bool_panic_on_binary_op() {
+        let left = ComputationNode::leaf(|| true);
+        let right = ComputationNode::leaf(|| false);
+        let binary_op = ComputationNode::binary_op(left, right, BinaryOperation::Add);
+
+        let mut context = SampleContext::new();
+        binary_op.evaluate_bool(&mut context);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_unary_map_operation() {
+        let operand = ComputationNode::leaf(|| 5.0);
+        let mapped = ComputationNode::map(operand, |x| x * 2.0);
+
+        let result = mapped.evaluate_fresh();
+        assert_eq!(result, 10.0);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_unary_filter_operation() {
+        let operand = ComputationNode::leaf(|| 42.0);
+        let filtered = ComputationNode::UnaryOp {
+            operand: Box::new(operand),
+            operation: UnaryOperation::Filter(Arc::new(|x: &f64| *x > 0.0)),
+        };
+
+        let mut context = SampleContext::new();
+        let result = filtered.evaluate(&mut context);
+        assert_eq!(result, 42.0); // Filter currently just passes through
+    }
+
+    #[test]
+    fn test_graph_optimizer() {
+        let node = ComputationNode::leaf(|| 1.0);
+        let optimized = GraphOptimizer::optimize(node);
+
+        // Currently optimization is a no-op, but this tests the interface
+        assert_eq!(optimized.node_count(), 1);
+    }
+
+    #[test]
+    fn test_graph_visualizer_print_tree() {
+        let left = ComputationNode::leaf(|| 1.0);
+        let right = ComputationNode::leaf(|| 2.0);
+        let add_node = ComputationNode::binary_op(left, right, BinaryOperation::Add);
+
+        // This mainly tests that print_tree doesn't panic
+        GraphVisualizer::print_tree(&add_node, 0);
+    }
+
+    #[test]
+    fn test_graph_visualizer_dot_conditional() {
+        let condition = ComputationNode::leaf(|| true);
+        let if_true = ComputationNode::leaf(|| 10.0);
+        let if_false = ComputationNode::leaf(|| 20.0);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let dot = GraphVisualizer::to_dot(&conditional);
+
+        assert!(dot.contains("digraph G"));
+        assert!(dot.contains("If"));
+        assert!(dot.contains("diamond"));
+        assert!(dot.contains("cond"));
+        assert!(dot.contains("true"));
+        assert!(dot.contains("false"));
+    }
+
+    #[test]
+    fn test_graph_visualizer_dot_unary_op() {
+        let operand = ComputationNode::leaf(|| 5.0);
+        let unary = ComputationNode::map(operand, |x| x * 2.0);
+
+        let dot = GraphVisualizer::to_dot(&unary);
+
+        assert!(dot.contains("digraph G"));
+        assert!(dot.contains("UnaryOp"));
+        assert!(dot.contains("Leaf"));
+    }
+
+    #[test]
+    fn test_profiler_default() {
+        let profiler = GraphProfiler::default();
+        assert!(profiler.get_stats("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_profiler_get_stats_nonexistent() {
+        let profiler = GraphProfiler::new();
+        assert!(profiler.get_stats("nonexistent").is_none());
+    }
+
+    #[test]
+    fn test_profiler_multiple_executions() {
+        let mut profiler = GraphProfiler::new();
+
+        profiler.profile_execution("test", || {
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        });
+        profiler.profile_execution("test", || {
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        });
+        profiler.profile_execution("test", || {
+            std::thread::sleep(std::time::Duration::from_millis(3));
+        });
+
+        let stats = profiler.get_stats("test").unwrap();
+        assert_eq!(stats.count, 3);
+        assert!(stats.min <= stats.median);
+        assert!(stats.median <= stats.max);
+        assert!(stats.average.as_nanos() > 0);
+
+        profiler.print_report();
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_conditional_evaluation_false_branch() {
+        let condition = ComputationNode::leaf(|| false);
+        let if_true = ComputationNode::leaf(|| 10.0);
+        let if_false = ComputationNode::leaf(|| 20.0);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let result = conditional.evaluate_fresh();
+        assert_eq!(result, 20.0);
+    }
+
+    #[test]
+    fn test_bool_conditional_evaluation() {
+        let condition = ComputationNode::leaf(|| true);
+        let if_true = ComputationNode::leaf(|| true);
+        let if_false = ComputationNode::leaf(|| false);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let mut context = SampleContext::new();
+        let result = conditional.evaluate_bool(&mut context);
+        assert!(result);
+    }
+
+    #[test]
+    fn test_bool_unary_operation() {
+        let operand = ComputationNode::leaf(|| true);
+        let mapped = ComputationNode::map(operand, |x| !x);
+
+        let mut context = SampleContext::new();
+        let result = mapped.evaluate_bool(&mut context);
+        assert!(!result);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_binary_operations_subtraction() {
+        let left = ComputationNode::leaf(|| 10.0);
+        let right = ComputationNode::leaf(|| 3.0);
+        let sub_node = ComputationNode::binary_op(left, right, BinaryOperation::Sub);
+
+        let result = sub_node.evaluate_fresh();
+        assert_eq!(result, 7.0);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_binary_operations_multiplication() {
+        let left = ComputationNode::leaf(|| 4.0);
+        let right = ComputationNode::leaf(|| 5.0);
+        let mul_node = ComputationNode::binary_op(left, right, BinaryOperation::Mul);
+
+        let result = mul_node.evaluate_fresh();
+        assert_eq!(result, 20.0);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_binary_operations_division() {
+        let left = ComputationNode::leaf(|| 15.0);
+        let right = ComputationNode::leaf(|| 3.0);
+        let div_node = ComputationNode::binary_op(left, right, BinaryOperation::Div);
+
+        let result = div_node.evaluate_fresh();
+        assert_eq!(result, 5.0);
+    }
+
+    #[test]
+    fn test_nested_conditional_depth() {
+        let condition1 = ComputationNode::leaf(|| true);
+        let condition2 = ComputationNode::leaf(|| false);
+        let leaf1 = ComputationNode::leaf(|| 1.0);
+        let _leaf2 = ComputationNode::leaf(|| 2.0);
+        let leaf3 = ComputationNode::leaf(|| 3.0);
+        let leaf4 = ComputationNode::leaf(|| 4.0);
+
+        let inner_conditional = ComputationNode::conditional(condition2, leaf3, leaf4);
+        let outer_conditional = ComputationNode::conditional(condition1, leaf1, inner_conditional);
+
+        assert_eq!(outer_conditional.depth(), 3);
+        assert_eq!(outer_conditional.node_count(), 7);
+        assert!(outer_conditional.has_conditionals());
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_evaluate_conditional_with_arithmetic() {
+        let condition = ComputationNode::leaf(|| true);
+        let if_true = ComputationNode::leaf(|| 42.0);
+        let if_false = ComputationNode::leaf(|| 24.0);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let mut context = SampleContext::new();
+        let result = conditional.evaluate_conditional_with_arithmetic(&mut context);
+        assert_eq!(result, 42.0);
+
+        let leaf = ComputationNode::leaf(|| 99.0);
+        let result = leaf.evaluate_conditional_with_arithmetic(&mut context);
+        assert_eq!(result, 99.0);
+    }
+
+    #[test]
+    fn test_sample_context_different_types() {
+        let mut context = SampleContext::new();
+        let id1 = uuid::Uuid::new_v4();
+        let id2 = uuid::Uuid::new_v4();
+
+        context.set_value(id1, 42.0_f64);
+        context.set_value(id2, 100_i32);
+
+        assert_eq!(context.get_value::<f64>(&id1), Some(42.0));
+        assert_eq!(context.get_value::<i32>(&id2), Some(100));
+        assert_eq!(context.get_value::<f64>(&id2), None); // Wrong type
+        assert_eq!(context.get_value::<i32>(&id1), None); // Wrong type
+
+        assert_eq!(context.len(), 2);
+    }
+
+    #[test]
+    fn test_profile_stats_debug() {
+        let stats = ProfileStats {
+            count: 5,
+            total: std::time::Duration::from_millis(100),
+            average: std::time::Duration::from_millis(20),
+            median: std::time::Duration::from_millis(18),
+            min: std::time::Duration::from_millis(15),
+            max: std::time::Duration::from_millis(30),
+        };
+
+        let debug_str = format!("{stats:?}");
+        assert!(debug_str.contains("ProfileStats"));
+
+        let cloned = stats.clone();
+        assert_eq!(cloned.count, stats.count);
+    }
 }

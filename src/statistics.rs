@@ -589,4 +589,313 @@ mod tests {
         // Allow for some statistical variance in the test
         assert!(kurtosis.abs() < 2.0);
     }
+
+    #[test]
+    fn test_mode_empty_samples() {
+        let uncertain = Uncertain::new(|| None::<i32>);
+        let mode = uncertain.mode(0);
+        assert_eq!(mode, None);
+    }
+
+    #[test]
+    fn test_mode_integers() {
+        let uniform = Uncertain::new(|| if rand::random::<f64>() < 0.7 { 1 } else { 2 });
+        let mode = uniform.mode(1000);
+        assert_eq!(mode, Some(1));
+    }
+
+    #[test]
+    fn test_histogram_empty() {
+        let uncertain = Uncertain::new(|| 42);
+        let histogram = uncertain.histogram(0);
+        assert!(histogram.is_empty());
+    }
+
+    #[test]
+    fn test_histogram_bernoulli() {
+        let bernoulli = Uncertain::bernoulli(0.3);
+        let histogram = bernoulli.histogram(1000);
+
+        let true_count = histogram.get(&true).copied().unwrap_or(0);
+        let false_count = histogram.get(&false).copied().unwrap_or(0);
+
+        assert!(true_count > 200);
+        assert!(true_count < 400);
+        assert!(false_count > 600);
+        assert!(false_count < 800);
+        assert_eq!(true_count + false_count, 1000);
+    }
+
+    #[test]
+    fn test_variance_standalone() {
+        let normal = Uncertain::normal(5.0, 3.0);
+        let variance = normal.variance(1000);
+        assert!((variance - 9.0).abs() < 1.5);
+    }
+
+    #[test]
+    fn test_variance_zero() {
+        let constant = Uncertain::new(|| 42.0);
+        let variance = constant.variance(1000);
+        assert!(variance < 0.001);
+    }
+
+    #[test]
+    fn test_skewness_zero_std_dev() {
+        let constant = Uncertain::new(|| 5.0);
+        let skewness = constant.skewness(1000);
+        assert!(skewness.abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_kurtosis_zero_std_dev() {
+        let constant = Uncertain::new(|| 5.0);
+        let kurtosis = constant.kurtosis(1000);
+        assert!(kurtosis.abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_pdf_kde() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let density_at_mean = normal.pdf_kde(0.0, 1000, 0.1);
+        let density_at_tail = normal.pdf_kde(3.0, 1000, 0.1);
+
+        assert!(density_at_mean > density_at_tail);
+        assert!(density_at_mean > 0.0);
+        assert!(density_at_tail > 0.0);
+    }
+
+    #[test]
+    fn test_log_likelihood() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let ll_at_mean = normal.log_likelihood(0.0, 1000, 0.1);
+        let ll_at_tail = normal.log_likelihood(3.0, 1000, 0.1);
+
+        assert!(ll_at_mean > ll_at_tail);
+        assert!(ll_at_mean.is_finite());
+    }
+
+    #[test]
+    fn test_log_likelihood_zero_pdf() {
+        let point = Uncertain::new(|| 0.0);
+        let ll = point.log_likelihood(10.0, 100, 0.01);
+        assert!(ll.is_infinite() && ll.is_sign_negative());
+    }
+
+    #[test]
+    fn test_correlation_positive() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y_values = vec![2.0, 4.0, 6.0, 8.0, 10.0];
+
+        let x_counter = Arc::new(AtomicUsize::new(0));
+        let x = Uncertain::new({
+            let values = values.clone();
+            let counter = x_counter.clone();
+            move || {
+                let idx = counter.fetch_add(1, Ordering::SeqCst);
+                values[idx % values.len()]
+            }
+        });
+
+        let y_counter = Arc::new(AtomicUsize::new(0));
+        let y = Uncertain::new({
+            let values = y_values.clone();
+            let counter = y_counter.clone();
+            move || {
+                let idx = counter.fetch_add(1, Ordering::SeqCst);
+                values[idx % values.len()]
+            }
+        });
+
+        let correlation = x.correlation(&y, 5);
+        assert!((correlation - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_correlation_negative() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let values = vec![1.0, 2.0, 3.0, 4.0, 5.0];
+        let y_values = vec![5.0, 4.0, 3.0, 2.0, 1.0];
+
+        let x_counter = Arc::new(AtomicUsize::new(0));
+        let x = Uncertain::new({
+            let values = values.clone();
+            let counter = x_counter.clone();
+            move || {
+                let idx = counter.fetch_add(1, Ordering::SeqCst);
+                values[idx % values.len()]
+            }
+        });
+
+        let y_counter = Arc::new(AtomicUsize::new(0));
+        let y = Uncertain::new({
+            let values = y_values.clone();
+            let counter = y_counter.clone();
+            move || {
+                let idx = counter.fetch_add(1, Ordering::SeqCst);
+                values[idx % values.len()]
+            }
+        });
+
+        let correlation = x.correlation(&y, 5);
+        assert!((correlation + 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_correlation_independent() {
+        let x = Uncertain::normal(0.0, 1.0);
+        let y = Uncertain::normal(10.0, 1.0);
+        let correlation = x.correlation(&y, 1000);
+
+        assert!(correlation.abs() < 0.2);
+    }
+
+    #[test]
+    fn test_correlation_zero_variance() {
+        let x = Uncertain::new(|| 5.0);
+        let y = Uncertain::normal(0.0, 1.0);
+        let correlation = x.correlation(&y, 1000);
+
+        assert!(correlation.abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_interquartile_range() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let iqr = normal.interquartile_range(1000);
+
+        assert!(iqr > 1.0);
+        assert!(iqr < 2.0);
+    }
+
+    #[test]
+    fn test_median_absolute_deviation() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let mad = normal.median_absolute_deviation(1000);
+
+        assert!(mad > 0.5);
+        assert!(mad < 1.0);
+    }
+
+    #[test]
+    fn test_quantile_extremes() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let min_quantile = normal.quantile(0.0, 1000);
+        let max_quantile = normal.quantile(1.0, 1000);
+
+        assert!(min_quantile < max_quantile);
+        assert!(min_quantile < -2.0);
+        assert!(max_quantile > 2.0);
+    }
+
+    #[test]
+    fn test_cdf_extremes() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let prob_low = normal.cdf(-5.0, 1000);
+        let prob_high = normal.cdf(5.0, 1000);
+
+        assert!(prob_low < 0.1);
+        assert!(prob_high > 0.9);
+        assert!(prob_low < prob_high);
+    }
+
+    #[test]
+    fn test_confidence_interval_different_levels() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let (lower_90, upper_90) = normal.confidence_interval(0.90, 1000);
+        let (lower_99, upper_99) = normal.confidence_interval(0.99, 1000);
+
+        assert!(lower_99 < lower_90);
+        assert!(upper_99 > upper_90);
+        assert!(upper_90 - lower_90 < upper_99 - lower_99);
+    }
+
+    #[test]
+    fn test_entropy_deterministic() {
+        let constant = Uncertain::new(|| "always");
+        let entropy = constant.entropy(1000);
+        assert!(entropy < 0.01);
+    }
+
+    #[test]
+    fn test_entropy_maximum() {
+        let mut probs = HashMap::new();
+        probs.insert("a", 0.25);
+        probs.insert("b", 0.25);
+        probs.insert("c", 0.25);
+        probs.insert("d", 0.25);
+
+        let uniform = Uncertain::categorical(&probs).unwrap();
+        let entropy = uniform.entropy(2000);
+
+        assert!((entropy - 2.0).abs() < 0.2);
+    }
+
+    #[test]
+    fn test_mode_tie_handling() {
+        let balanced = Uncertain::new(|| if rand::random::<bool>() { 1 } else { 2 });
+        let mode = balanced.mode(1000);
+        assert!(mode == Some(1) || mode == Some(2));
+    }
+
+    #[test]
+    fn test_statistical_consistency() {
+        let normal = Uncertain::normal(10.0, 2.0);
+
+        let mean = normal.expected_value(2000);
+        let median = normal.quantile(0.5, 2000);
+        let mode_samples: Vec<f64> = (0..100).map(|_| normal.sample()).collect();
+        let empirical_mean = mode_samples.iter().sum::<f64>() / mode_samples.len() as f64;
+
+        assert!((mean - 10.0).abs() < 0.3);
+        assert!((median - 10.0).abs() < 0.3);
+        assert!((empirical_mean - 10.0).abs() < 0.5);
+        assert!((mean - median).abs() < 0.3);
+    }
+
+    #[test]
+    fn test_caching_behavior() {
+        let normal = Uncertain::normal(5.0, 1.0);
+
+        let mean1 = normal.expected_value(1000);
+        let mean2 = normal.expected_value(1000);
+        assert!((mean1 - mean2).abs() < f64::EPSILON);
+
+        let var1 = normal.variance(1000);
+        let var2 = normal.variance(1000);
+        assert!((var1 - var2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_large_sample_counts() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let mean = normal.expected_value(10000);
+        let std_dev = normal.standard_deviation(10000);
+
+        assert!((mean - 0.0).abs() < 0.1);
+        assert!((std_dev - 1.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn test_histogram_with_different_types() {
+        let chars = Uncertain::new(|| match rand::random::<u8>() % 3 {
+            0 => 'A',
+            1 => 'B',
+            _ => 'C',
+        });
+
+        let histogram = chars.histogram(300);
+        assert_eq!(histogram.len(), 3);
+        assert!(histogram.contains_key(&'A'));
+        assert!(histogram.contains_key(&'B'));
+        assert!(histogram.contains_key(&'C'));
+
+        let total: usize = histogram.values().sum();
+        assert_eq!(total, 300);
+    }
 }
