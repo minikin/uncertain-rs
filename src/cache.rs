@@ -391,13 +391,12 @@ mod tests {
         assert_eq!(result, 42);
         assert_eq!(call_count, 1);
 
-        // Second call should use cached value
         let result2 = cache.get_or_compute("test", || {
             call_count += 1;
             99
         });
         assert_eq!(result2, 42);
-        assert_eq!(call_count, 1); // Shouldn't increment
+        assert_eq!(call_count, 1);
     }
 
     #[test]
@@ -408,7 +407,6 @@ mod tests {
         let result = cache.get_or_compute_expected_value(test_id, 1000, || 42.0);
         assert_eq!(result, 42.0);
 
-        // Should use cached value
         let result2 = cache.get_or_compute_expected_value(test_id, 1000, || 99.0);
         assert_eq!(result2, 42.0);
     }
@@ -421,7 +419,6 @@ mod tests {
         let result = cache.get_or_compute_samples(test_id, 100, || vec![1.0, 2.0, 3.0]);
         assert_eq!(result, vec![1.0, 2.0, 3.0]);
 
-        // Should use cached value
         let result2 = cache.get_or_compute_samples(test_id, 100, || vec![4.0, 5.0, 6.0]);
         assert_eq!(result2, vec![1.0, 2.0, 3.0]);
     }
@@ -450,5 +447,205 @@ mod tests {
         cache.clear();
         assert_eq!(cache.len(), 0);
         assert!(cache.is_empty());
+    }
+
+    #[test]
+    fn test_ttl_cache_default() {
+        let cache = TtlCache::<String, i32>::default();
+
+        cache.insert("test".to_string(), 42);
+        assert_eq!(cache.get(&"test".to_string()), Some(42));
+        assert!(!cache.is_empty());
+    }
+
+    #[test]
+    fn test_ttl_cache_is_empty() {
+        let cache = TtlCache::new(Duration::from_secs(1));
+
+        assert!(cache.is_empty());
+        assert_eq!(cache.len(), 0);
+
+        cache.insert("key", "value");
+        assert!(!cache.is_empty());
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn test_ttl_cache_concurrent_access() {
+        use std::sync::Arc;
+
+        let cache = Arc::new(TtlCache::new(Duration::from_secs(1)));
+        let mut handles = vec![];
+
+        for i in 0..10 {
+            let cache_clone = Arc::clone(&cache);
+            let handle = thread::spawn(move || {
+                cache_clone.insert(format!("key{i}"), i);
+                cache_clone.get(&format!("key{i}"))
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            let result = handle.join().unwrap();
+            assert!(result.is_some());
+        }
+
+        assert_eq!(cache.len(), 10);
+    }
+
+    #[test]
+    fn test_statistics_cache_all_methods() {
+        let cache = StatisticsCache::new();
+        let test_id = uuid::Uuid::new_v4();
+
+        let variance = cache.get_or_compute_variance(test_id, 1000, || 25.0);
+        assert_eq!(variance, 25.0);
+        let variance2 = cache.get_or_compute_variance(test_id, 1000, || 50.0);
+        assert_eq!(variance2, 25.0); // Should use cached value
+
+        let std_dev = cache.get_or_compute_std_dev(test_id, 1000, || 5.0);
+        assert_eq!(std_dev, 5.0);
+
+        let skewness = cache.get_or_compute_skewness(test_id, 1000, || 0.5);
+        assert_eq!(skewness, 0.5);
+
+        let kurtosis = cache.get_or_compute_kurtosis(test_id, 1000, || 3.0);
+        assert_eq!(kurtosis, 3.0);
+
+        let ci = cache.get_or_compute_confidence_interval(test_id, 1000, 0.95, || (1.0, 2.0));
+        assert_eq!(ci, (1.0, 2.0));
+        let ci2 = cache.get_or_compute_confidence_interval(test_id, 1000, 0.95, || (3.0, 4.0));
+        assert_eq!(ci2, (1.0, 2.0)); // Should use cached value
+
+        let cdf = cache.get_or_compute_cdf(test_id, 1000, 1.5, || 0.75);
+        assert_eq!(cdf, 0.75);
+        let cdf2 = cache.get_or_compute_cdf(test_id, 1000, 1.5, || 0.85);
+        assert_eq!(cdf2, 0.75); // Should use cached value
+
+        let quantile = cache.get_or_compute_quantile(test_id, 1000, 0.5, || 1.0);
+        assert_eq!(quantile, 1.0);
+        let quantile2 = cache.get_or_compute_quantile(test_id, 1000, 0.5, || 2.0);
+        assert_eq!(quantile2, 1.0); // Should use cached value
+    }
+
+    #[test]
+    fn test_statistics_cache_clear_and_cleanup() {
+        let cache = StatisticsCache::new();
+        let test_id = uuid::Uuid::new_v4();
+
+        cache.get_or_compute_expected_value(test_id, 1000, || 42.0);
+        cache.get_or_compute_variance(test_id, 1000, || 25.0);
+        cache.get_or_compute_confidence_interval(test_id, 1000, 0.95, || (1.0, 2.0));
+
+        cache.clear_all();
+
+        let result = cache.get_or_compute_expected_value(test_id, 1000, || 99.0);
+        assert_eq!(result, 99.0);
+
+        cache.cleanup_all_expired();
+        let result2 = cache.get_or_compute_expected_value(test_id, 1000, || 88.0);
+        assert_eq!(result2, 99.0); // Should still be cached
+    }
+
+    #[test]
+    fn test_statistics_cache_default() {
+        let cache = StatisticsCache::default();
+        let test_id = uuid::Uuid::new_v4();
+
+        let result = cache.get_or_compute_expected_value(test_id, 1000, || 42.0);
+        assert_eq!(result, 42.0);
+    }
+
+    #[test]
+    fn test_distribution_cache_all_methods() {
+        let cache = DistributionCache::new();
+        let test_id = uuid::Uuid::new_v4();
+
+        let samples = cache.get_or_compute_samples(test_id, 100, || vec![1.0, 2.0, 3.0]);
+        assert_eq!(samples, vec![1.0, 2.0, 3.0]);
+
+        let pdf = cache.get_or_compute_pdf_kde(test_id, 100, 1.5, 0.1, || 0.25);
+        assert_eq!(pdf, 0.25);
+        let pdf2 = cache.get_or_compute_pdf_kde(test_id, 100, 1.5, 0.1, || 0.50);
+        assert_eq!(pdf2, 0.25);
+
+        let pdf3 = cache.get_or_compute_pdf_kde(test_id, 100, 1.6, 0.1, || 0.30);
+        assert_eq!(pdf3, 0.30);
+
+        let pdf4 = cache.get_or_compute_pdf_kde(test_id, 100, 1.5, 0.2, || 0.35);
+        assert_eq!(pdf4, 0.35);
+    }
+
+    #[test]
+    fn test_distribution_cache_clear_and_cleanup() {
+        let cache = DistributionCache::new();
+        let test_id = uuid::Uuid::new_v4();
+
+        cache.get_or_compute_samples(test_id, 100, || vec![1.0, 2.0]);
+        cache.get_or_compute_pdf_kde(test_id, 100, 1.5, 0.1, || 0.25);
+
+        cache.clear_all();
+
+        let samples = cache.get_or_compute_samples(test_id, 100, || vec![3.0, 4.0]);
+        assert_eq!(samples, vec![3.0, 4.0]);
+
+        let pdf = cache.get_or_compute_pdf_kde(test_id, 100, 1.5, 0.1, || 0.50);
+        assert_eq!(pdf, 0.50);
+
+        cache.cleanup_all_expired();
+        let samples2 = cache.get_or_compute_samples(test_id, 100, || vec![5.0, 6.0]);
+        assert_eq!(samples2, vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_distribution_cache_default() {
+        let cache = DistributionCache::default();
+        let test_id = uuid::Uuid::new_v4();
+
+        let samples = cache.get_or_compute_samples(test_id, 100, || vec![1.0, 2.0]);
+        assert_eq!(samples, vec![1.0, 2.0]);
+    }
+
+    #[test]
+    fn test_global_cache_functions() {
+        let stats = stats_cache();
+        let dist = dist_cache();
+
+        let test_id = uuid::Uuid::new_v4();
+
+        let result = stats.get_or_compute_expected_value(test_id, 1000, || 42.0);
+        assert_eq!(result, 42.0);
+
+        let samples = dist.get_or_compute_samples(test_id, 100, || vec![1.0, 2.0]);
+        assert_eq!(samples, vec![1.0, 2.0]);
+
+        cleanup_global_caches();
+
+        let result2 = stats.get_or_compute_expected_value(test_id, 1000, || 99.0);
+        assert_eq!(result2, 42.0);
+
+        clear_global_caches();
+
+        let result3 = stats.get_or_compute_expected_value(test_id, 1000, || 99.0);
+        assert_eq!(result3, 99.0);
+
+        let samples2 = dist.get_or_compute_samples(test_id, 100, || vec![3.0, 4.0]);
+        assert_eq!(samples2, vec![3.0, 4.0]);
+    }
+
+    #[test]
+    fn test_cache_key_precision_handling() {
+        let cache = StatisticsCache::new();
+        let test_id = uuid::Uuid::new_v4();
+
+        let ci1 = cache.get_or_compute_confidence_interval(test_id, 1000, 0.95, || (1.0, 2.0));
+        let ci2 = cache.get_or_compute_confidence_interval(test_id, 1000, 0.96, || (3.0, 4.0));
+
+        assert_eq!(ci1, (1.0, 2.0));
+        assert_eq!(ci2, (3.0, 4.0));
+
+        let ci3 = cache.get_or_compute_confidence_interval(test_id, 1000, 0.95, || (5.0, 6.0));
+        assert_eq!(ci3, (1.0, 2.0));
     }
 }
