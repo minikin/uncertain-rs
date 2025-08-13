@@ -9,13 +9,13 @@
 //! uses evidence-based conditionals that account for uncertainty:
 //!
 //! ```rust
-//! use uncertain_rs::{Uncertain, operations::Comparison};
+//! use uncertain_rs::Uncertain;
 //!
 //! // Create uncertain values from probability distributions
 //! let speed = Uncertain::normal(55.2, 5.0); // GPS reading with ±5 mph error
 //!
 //! // Evidence-based conditional (returns Uncertain<bool>)
-//! let speeding_evidence = Comparison::gt(&speed, 60.0);
+//! let speeding_evidence = speed.gt(60.0);
 //!
 //! // Convert evidence to decision with confidence level
 //! if speeding_evidence.probability_exceeds(0.95) {
@@ -46,4 +46,7 @@ pub use hypothesis::HypothesisResult;
 pub use traits::Shareable;
 pub use uncertain::Uncertain;
 
-pub use operations::{Arithmetic, Comparison, LogicalOps};
+// Re-export operation traits for advanced use cases
+// For most users, prefer the method-based API on Uncertain<T>
+pub use operations::{Arithmetic, LogicalOps};
+// Comparison trait available but not re-exported to encourage method-based API

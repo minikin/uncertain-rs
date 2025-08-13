@@ -7,6 +7,10 @@ use crate::traits::Shareable;
 ///
 /// The key insight from the paper: comparisons return `Uncertain<bool>` (evidence),
 /// not `bool` (boolean facts). This prevents uncertainty bugs.
+///
+/// **Note**: For most use cases, prefer the method-based API (e.g., `value.gt(threshold)`)
+/// over the trait-based API (e.g., `Comparison::gt(&value, threshold)`). The trait is
+/// primarily useful for generic programming and advanced scenarios.
 pub trait Comparison<T> {
     /// Returns uncertain boolean evidence that this value is greater than threshold
     #[must_use]
@@ -41,10 +45,10 @@ where
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, operations::Comparison};
+    /// use uncertain_rs::Uncertain;
     ///
     /// let speed = Uncertain::normal(55.0, 5.0);
-    /// let speeding_evidence = Comparison::gt(&speed, 60.0);
+    /// let speeding_evidence = speed.gt(60.0);
     ///
     /// if speeding_evidence.probability_exceeds(0.95) {
     ///     println!("95% confident speeding");
@@ -59,10 +63,10 @@ where
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, operations::Comparison};
+    /// use uncertain_rs::Uncertain;
     ///
     /// let temperature = Uncertain::normal(1.0, 2.0);
-    /// let freezing_evidence = Comparison::lt(&temperature, 0.0);
+    /// let freezing_evidence = temperature.lt(0.0);
     ///
     /// if freezing_evidence.probability_exceeds(0.8) {
     ///     println!("Likely freezing");
