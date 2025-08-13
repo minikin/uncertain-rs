@@ -18,8 +18,12 @@ lint:
 test:
     cargo test
 
-# Development workflow (format + lint + test)
-dev: fmt lint test
+# Security audit - check for known vulnerabilities in dependencies
+audit:
+    cargo audit
+
+# Development workflow (format + lint + test + audit)
+dev: fmt lint test audit
 
 # Clean build artifacts (including nextest cache)
 clean:

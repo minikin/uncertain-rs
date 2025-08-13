@@ -18,6 +18,8 @@ A Rust library for uncertainty-aware programming, implementing the approach from
     - [Lower Priority:](#lower-priority)
   - [License](#license)
   - [Contributing](#contributing)
+    - [Development Workflow](#development-workflow)
+    - [Security](#security)
 
 ## Core Concept: Evidence-Based Conditionals
 
@@ -111,3 +113,23 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development Workflow
+
+We use [just](https://github.com/casey/just) as a task runner. Available commands:
+
+- `just fmt` - Format code
+- `just lint` - Run clippy linting
+- `just test` - Run tests
+- `just audit` - Security audit (check for vulnerabilities)
+- `just dev` - Run the full development workflow (format + lint + test + audit)
+
+### Security
+
+This project takes security seriously. We run `cargo audit` to check for known vulnerabilities in dependencies:
+
+- **CI**: Automated security audits run on every push and PR
+- **Local**: Run `just audit` or `cargo audit` before submitting changes
+- **Installation**: If you don't have `cargo-audit`, run `cargo install cargo-audit`
+
+The security audit checks all dependencies against the [RustSec Advisory Database](https://rustsec.org/).

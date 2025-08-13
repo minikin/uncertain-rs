@@ -4,6 +4,10 @@ use crate::Uncertain;
 use crate::traits::Shareable;
 
 /// Trait for logical operations on uncertain boolean values
+///
+/// **Note**: For most use cases, these trait methods provide the primary API for logical
+/// operations on uncertain boolean values. Unlike comparison operations, logical operations
+/// don't have method-based equivalents on `Uncertain<bool>`.
 pub trait LogicalOps {
     /// Logical AND operation
     #[must_use]
@@ -35,10 +39,13 @@ impl LogicalOps for Uncertain<bool> {
     ///
     /// # Example
     /// ```rust
-    /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
+    /// use uncertain_rs::{Uncertain, operations::LogicalOps};
     ///
-    /// let temp_ok = Uncertain::normal(20.0, 2.0).within_range(18.0, 25.0);
-    /// let humidity_ok = Uncertain::normal(50.0, 5.0).within_range(40.0, 60.0);
+    /// let temp = Uncertain::normal(20.0, 2.0);
+    /// let humidity = Uncertain::normal(50.0, 5.0);
+    ///
+    /// let temp_ok = temp.ge(18.0).and(&temp.le(25.0));
+    /// let humidity_ok = humidity.ge(40.0).and(&humidity.le(60.0));
     ///
     /// let comfortable = temp_ok.and(&humidity_ok);
     /// if comfortable.probability_exceeds(0.8) {
