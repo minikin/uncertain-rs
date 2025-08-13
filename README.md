@@ -69,7 +69,7 @@ fn main() {
     let y = Uncertain::normal(3.0, 0.5);
 
     // Perform arithmetic operations
-    let sum = x + y;
+    let sum = x.clone() + y.clone();
     let product = x * y;
 
     // Sample from the distributions
