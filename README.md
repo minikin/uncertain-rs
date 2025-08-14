@@ -18,8 +18,8 @@ A Rust library for uncertainty-aware programming, implementing the approach from
     - [Lower Priority:](#lower-priority)
   - [Development Workflow](#development-workflow)
     - [Security](#security)
-  - [License](#license)
   - [Contributing](#contributing)
+  - [License](#license)
 
 ## Core Concept: Evidence-Based Conditionals
 
@@ -126,10 +126,10 @@ This project takes security seriously. We run `cargo audit` to check for known v
 
 The security audit checks all dependencies against the [RustSec Advisory Database](https://rustsec.org/).
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
