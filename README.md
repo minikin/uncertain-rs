@@ -16,7 +16,7 @@ A Rust library for uncertainty-aware programming, implementing the approach from
     - [High Priority:](#high-priority)
     - [Medium Priority:](#medium-priority)
     - [Lower Priority:](#lower-priority)
-    - [Development Workflow](#development-workflow)
+  - [Development Workflow](#development-workflow)
     - [Security](#security)
   - [License](#license)
   - [Contributing](#contributing)
@@ -106,7 +106,7 @@ For more examples, see the [examples directory](examples).
 - Visualization support: Histogram generation and CSV export
 - Better documentation: More cross-references to the original paper
 
-### Development Workflow
+## Development Workflow
 
 We use [just](https://github.com/casey/just) as a task runner. Available commands:
 
