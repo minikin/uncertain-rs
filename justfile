@@ -12,7 +12,7 @@ fmt:
 
 # Run linting
 lint:
-    cargo clippy -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Run tests
 test:
