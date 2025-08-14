@@ -454,20 +454,19 @@ fn demonstrate_fallback_strategies(sensors: &HashMap<String, SensorReading>) {
 
     if let (Some(pressure_reading), Some(temp_reading)) =
         (sensors.get("pressure_1"), sensors.get("temp_1"))
+        && let (Some(pressure), Some(temp)) = (pressure_reading.value, temp_reading.value)
     {
-        if let (Some(pressure), Some(temp)) = (pressure_reading.value, temp_reading.value) {
-            // Sanity check: pressure and temperature correlation
-            let expected_temp_from_pressure = estimate_temperature_from_pressure(pressure);
-            let temp_diff = (temp - expected_temp_from_pressure).abs();
+        // Sanity check: pressure and temperature correlation
+        let expected_temp_from_pressure = estimate_temperature_from_pressure(pressure);
+        let temp_diff = (temp - expected_temp_from_pressure).abs();
 
-            if temp_diff > 10.0 {
-                println!("         ⚠️  Temperature-pressure correlation check failed");
-                println!(
-                    "         Expected temp: {expected_temp_from_pressure:.1}°C, Measured: {temp:.1}°C"
-                );
-            } else {
-                println!("         ✅ Temperature-pressure correlation validated");
-            }
+        if temp_diff > 10.0 {
+            println!("         ⚠️  Temperature-pressure correlation check failed");
+            println!(
+                "         Expected temp: {expected_temp_from_pressure:.1}°C, Measured: {temp:.1}°C"
+            );
+        } else {
+            println!("         ✅ Temperature-pressure correlation validated");
         }
     }
 
