@@ -16,10 +16,10 @@ A Rust library for uncertainty-aware programming, implementing the approach from
     - [High Priority:](#high-priority)
     - [Medium Priority:](#medium-priority)
     - [Lower Priority:](#lower-priority)
-  - [License](#license)
-  - [Contributing](#contributing)
     - [Development Workflow](#development-workflow)
     - [Security](#security)
+  - [License](#license)
+  - [Contributing](#contributing)
 
 ## Core Concept: Evidence-Based Conditionals
 
@@ -106,14 +106,6 @@ For more examples, see the [examples directory](examples).
 - Visualization support: Histogram generation and CSV export
 - Better documentation: More cross-references to the original paper
 
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
 ### Development Workflow
 
 We use [just](https://github.com/casey/just) as a task runner. Available commands:
@@ -133,3 +125,11 @@ This project takes security seriously. We run `cargo audit` to check for known v
 - **Installation**: If you don't have `cargo-audit`, run `cargo install cargo-audit`
 
 The security audit checks all dependencies against the [RustSec Advisory Database](https://rustsec.org/).
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
