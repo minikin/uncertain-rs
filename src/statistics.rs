@@ -886,12 +886,12 @@ mod tests {
 
         let mean = normal.expected_value(2000);
         let median = normal.quantile(0.5, 2000);
-        let mode_samples: Vec<f64> = (0..100).map(|_| normal.sample()).collect();
+        let mode_samples: Vec<f64> = (0..1000).map(|_| normal.sample()).collect();
         let empirical_mean = mode_samples.iter().sum::<f64>() / mode_samples.len() as f64;
 
         assert!((mean - 10.0).abs() < 0.3);
         assert!((median - 10.0).abs() < 0.3);
-        assert!((empirical_mean - 10.0).abs() < 0.5);
+        assert!((empirical_mean - 10.0).abs() < 0.3);
         assert!((mean - median).abs() < 0.3);
     }
 
