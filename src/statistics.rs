@@ -6,6 +6,7 @@
 
 use crate::Uncertain;
 use crate::cache;
+use crate::computation::AdaptiveSampling;
 use crate::traits::Shareable;
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -129,6 +130,42 @@ where
             let sum: f64 = samples.into_iter().map(Into::into).sum();
             sum / sample_count as f64
         })
+    }
+
+    /// Calculates the expected value using adaptive sampling for better efficiency
+    ///
+    /// This method automatically determines the optimal sample count based on
+    /// convergence criteria, potentially improving cache hit rates for similar computations.
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    /// use uncertain_rs::computation::AdaptiveSampling;
+    ///
+    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let config = AdaptiveSampling::default();
+    /// let mean = normal.expected_value_adaptive(&config);
+    /// // Should be approximately 10.0 with optimal sample count
+    /// ```
+    #[must_use]
+    pub fn expected_value_adaptive(&self, config: &AdaptiveSampling) -> f64 {
+        let mut sample_count = config.min_samples;
+        let mut prev_mean = 0.0;
+
+        loop {
+            let mean = self.expected_value(sample_count);
+
+            if sample_count > config.min_samples {
+                let relative_error = ((mean - prev_mean) / mean).abs();
+                if relative_error < config.error_threshold || sample_count >= config.max_samples {
+                    return mean;
+                }
+            }
+
+            prev_mean = mean;
+            sample_count =
+                ((sample_count as f64 * config.growth_factor) as usize).min(config.max_samples);
+        }
     }
 
     /// Calculates the variance of the distribution
@@ -849,12 +886,12 @@ mod tests {
 
         let mean = normal.expected_value(2000);
         let median = normal.quantile(0.5, 2000);
-        let mode_samples: Vec<f64> = (0..100).map(|_| normal.sample()).collect();
+        let mode_samples: Vec<f64> = (0..1000).map(|_| normal.sample()).collect();
         let empirical_mean = mode_samples.iter().sum::<f64>() / mode_samples.len() as f64;
 
         assert!((mean - 10.0).abs() < 0.3);
         assert!((median - 10.0).abs() < 0.3);
-        assert!((empirical_mean - 10.0).abs() < 0.5);
+        assert!((empirical_mean - 10.0).abs() < 0.3);
         assert!((mean - median).abs() < 0.3);
     }
 
