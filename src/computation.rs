@@ -3,11 +3,50 @@ use crate::traits::Shareable;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+/// Adaptive sampling strategy for optimizing computation graph evaluation
+#[derive(Debug, Clone)]
+pub struct AdaptiveSampling {
+    /// Minimum sample count to try
+    pub min_samples: usize,
+    /// Maximum sample count allowed
+    pub max_samples: usize,
+    /// Relative error threshold for convergence
+    pub error_threshold: f64,
+    /// Factor to increase sample count on each iteration
+    pub growth_factor: f64,
+}
+
+impl Default for AdaptiveSampling {
+    fn default() -> Self {
+        Self {
+            min_samples: 100,
+            max_samples: 10000,
+            error_threshold: 0.01,
+            growth_factor: 1.5,
+        }
+    }
+}
+
+/// Caching strategy for computation graph nodes
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CachingStrategy {
+    /// Cache all intermediate results
+    Aggressive,
+    /// Cache only expensive operations
+    Conservative,
+    /// Adaptive caching based on computation cost
+    Adaptive,
+}
+
 /// Context for memoizing samples within a single evaluation to ensure
 /// shared variables produce the same sample value throughout an evaluation
 pub struct SampleContext {
     /// Memoized values indexed by node ID
     memoized_values: HashMap<uuid::Uuid, Box<dyn std::any::Any + Send>>,
+    /// Current caching strategy
+    caching_strategy: CachingStrategy,
+    /// Adaptive sampling configuration
+    adaptive_sampling: AdaptiveSampling,
 }
 
 impl SampleContext {
@@ -16,6 +55,18 @@ impl SampleContext {
     pub fn new() -> Self {
         Self {
             memoized_values: HashMap::new(),
+            caching_strategy: CachingStrategy::Adaptive,
+            adaptive_sampling: AdaptiveSampling::default(),
+        }
+    }
+
+    /// Create a sample context with specific caching strategy
+    #[must_use]
+    pub fn with_caching_strategy(strategy: CachingStrategy) -> Self {
+        Self {
+            memoized_values: HashMap::new(),
+            caching_strategy: strategy,
+            adaptive_sampling: AdaptiveSampling::default(),
         }
     }
 
@@ -45,6 +96,33 @@ impl SampleContext {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.memoized_values.is_empty()
+    }
+
+    /// Determine if a node should be cached based on strategy and cost
+    #[must_use]
+    pub fn should_cache_node(&self, node: &ComputationNode<impl Shareable>) -> bool {
+        match self.caching_strategy {
+            CachingStrategy::Aggressive => true,
+            CachingStrategy::Conservative => {
+                // Only cache expensive operations (depth > 2 or complex nodes)
+                node.depth() > 2 || matches!(node, ComputationNode::Conditional { .. })
+            }
+            CachingStrategy::Adaptive => {
+                let complexity = node.compute_complexity();
+                complexity > 5 // Threshold for caching
+            }
+        }
+    }
+
+    /// Get the adaptive sampling configuration
+    #[must_use]
+    pub fn adaptive_sampling(&self) -> &AdaptiveSampling {
+        &self.adaptive_sampling
+    }
+
+    /// Set adaptive sampling configuration
+    pub fn set_adaptive_sampling(&mut self, config: AdaptiveSampling) {
+        self.adaptive_sampling = config;
     }
 }
 
@@ -306,6 +384,73 @@ where
             ComputationNode::Conditional { .. } => true,
         }
     }
+
+    /// Estimate computational complexity of the node for caching decisions
+    #[must_use]
+    pub fn compute_complexity(&self) -> usize {
+        match self {
+            ComputationNode::Leaf { .. } => 1,
+            ComputationNode::BinaryOp { left, right, .. } => {
+                2 + left.compute_complexity() + right.compute_complexity()
+            }
+            ComputationNode::UnaryOp { operand, .. } => 1 + operand.compute_complexity(),
+            ComputationNode::Conditional {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                5 + condition.compute_complexity()
+                    + if_true.compute_complexity()
+                    + if_false.compute_complexity()
+            }
+        }
+    }
+
+    /// Generate a structural hash for computation graph caching
+    #[must_use]
+    pub fn structural_hash(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::Hasher;
+
+        let mut hasher = DefaultHasher::new();
+        self.hash_structure(&mut hasher);
+        hasher.finish()
+    }
+
+    fn hash_structure(&self, hasher: &mut impl std::hash::Hasher) {
+        use std::hash::Hash;
+
+        match self {
+            ComputationNode::Leaf { id, .. } => {
+                "leaf".hash(hasher);
+                id.hash(hasher);
+            }
+            ComputationNode::BinaryOp {
+                left,
+                right,
+                operation,
+            } => {
+                "binary".hash(hasher);
+                operation.hash(hasher);
+                left.hash_structure(hasher);
+                right.hash_structure(hasher);
+            }
+            ComputationNode::UnaryOp { operand, .. } => {
+                "unary".hash(hasher);
+                operand.hash_structure(hasher);
+            }
+            ComputationNode::Conditional {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                "conditional".hash(hasher);
+                condition.hash_structure(hasher);
+                if_true.hash_structure(hasher);
+                if_false.hash_structure(hasher);
+            }
+        }
+    }
 }
 
 // Specialized implementation for handling conditionals with boolean conditions
@@ -381,18 +526,88 @@ where
 }
 
 /// Computation graph optimizer for improving evaluation performance
-pub struct GraphOptimizer;
+pub struct GraphOptimizer {
+    /// Cache of optimized subexpressions
+    subexpression_cache: HashMap<u64, uuid::Uuid>,
+}
 
 impl GraphOptimizer {
+    /// Create a new graph optimizer
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            subexpression_cache: HashMap::new(),
+        }
+    }
+
     /// Optimizes a computation graph by applying various transformations
     #[must_use]
-    pub fn optimize<T>(node: ComputationNode<T>) -> ComputationNode<T>
+    pub fn optimize<T>(&mut self, node: ComputationNode<T>) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic,
+    {
+        let node = self.eliminate_common_subexpressions(node);
+        let node = Self::eliminate_identity_operations(node);
+        Self::constant_folding(node)
+    }
+
+    /// Eliminates common subexpressions by reusing nodes with same structure
+    fn eliminate_common_subexpressions<T>(&mut self, node: ComputationNode<T>) -> ComputationNode<T>
     where
         T: Shareable,
     {
-        // Apply optimizations in order
-        let node = Self::eliminate_identity_operations(node);
-        Self::constant_folding(node)
+        let hash = node.structural_hash();
+
+        if let Some(_existing_id) = self.subexpression_cache.get(&hash) {
+            // TODO: We need return the cached node, for now, just return the original
+            return node;
+        }
+
+        // Recursively optimize children and cache this node
+        let optimized = match node {
+            ComputationNode::BinaryOp {
+                left,
+                right,
+                operation,
+            } => {
+                let left_opt = Box::new(self.eliminate_common_subexpressions(*left));
+                let right_opt = Box::new(self.eliminate_common_subexpressions(*right));
+                ComputationNode::BinaryOp {
+                    left: left_opt,
+                    right: right_opt,
+                    operation,
+                }
+            }
+            ComputationNode::UnaryOp { operand, operation } => {
+                let operand_opt = Box::new(self.eliminate_common_subexpressions(*operand));
+                ComputationNode::UnaryOp {
+                    operand: operand_opt,
+                    operation,
+                }
+            }
+            ComputationNode::Conditional {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                let condition_opt = Box::new(self.eliminate_common_subexpressions(*condition));
+                let if_true_opt = Box::new(self.eliminate_common_subexpressions(*if_true));
+                let if_false_opt = Box::new(self.eliminate_common_subexpressions(*if_false));
+                ComputationNode::Conditional {
+                    condition: condition_opt,
+                    if_true: if_true_opt,
+                    if_false: if_false_opt,
+                }
+            }
+            leaf @ ComputationNode::Leaf { .. } => leaf,
+        };
+
+        // Cache this subexpression for future use
+        if let ComputationNode::Leaf { id, .. } = &optimized {
+            self.subexpression_cache.insert(hash, *id);
+        }
+
+        optimized
     }
 
     /// Eliminates identity operations like `x + 0` or `x * 1`
@@ -400,9 +615,46 @@ impl GraphOptimizer {
     where
         T: Shareable,
     {
-        // This is a simplified version - in practice, you'd need more sophisticated
-        // pattern matching and constant detection
-        node
+        match node {
+            ComputationNode::BinaryOp {
+                left,
+                right,
+                operation,
+            } => {
+                let left_opt = Self::eliminate_identity_operations(*left);
+                let right_opt = Self::eliminate_identity_operations(*right);
+
+                // TODO: Add identity operation detection here
+                // For example, detect x + 0, x * 1, x - 0, etc.
+                ComputationNode::BinaryOp {
+                    left: Box::new(left_opt),
+                    right: Box::new(right_opt),
+                    operation,
+                }
+            }
+            ComputationNode::UnaryOp { operand, operation } => {
+                let operand_opt = Self::eliminate_identity_operations(*operand);
+                ComputationNode::UnaryOp {
+                    operand: Box::new(operand_opt),
+                    operation,
+                }
+            }
+            ComputationNode::Conditional {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                let condition_opt = Self::eliminate_identity_operations(*condition);
+                let if_true_opt = Self::eliminate_identity_operations(*if_true);
+                let if_false_opt = Self::eliminate_identity_operations(*if_false);
+                ComputationNode::Conditional {
+                    condition: Box::new(condition_opt),
+                    if_true: Box::new(if_true_opt),
+                    if_false: Box::new(if_false_opt),
+                }
+            }
+            leaf => leaf,
+        }
     }
 
     /// Performs constant folding for compile-time evaluation of constant expressions
@@ -410,9 +662,50 @@ impl GraphOptimizer {
     where
         T: Shareable,
     {
-        // This is a simplified version - in practice, you'd detect constant
-        // sub-expressions and pre-evaluate them
-        node
+        // TODO: We need detecting constant values and evaluating them at compile time, for now, we just recursively process the tree
+        match node {
+            ComputationNode::BinaryOp {
+                left,
+                right,
+                operation,
+            } => {
+                let left_opt = Self::constant_folding(*left);
+                let right_opt = Self::constant_folding(*right);
+                ComputationNode::BinaryOp {
+                    left: Box::new(left_opt),
+                    right: Box::new(right_opt),
+                    operation,
+                }
+            }
+            ComputationNode::UnaryOp { operand, operation } => {
+                let operand_opt = Self::constant_folding(*operand);
+                ComputationNode::UnaryOp {
+                    operand: Box::new(operand_opt),
+                    operation,
+                }
+            }
+            ComputationNode::Conditional {
+                condition,
+                if_true,
+                if_false,
+            } => {
+                let condition_opt = Self::constant_folding(*condition);
+                let if_true_opt = Self::constant_folding(*if_true);
+                let if_false_opt = Self::constant_folding(*if_false);
+                ComputationNode::Conditional {
+                    condition: Box::new(condition_opt),
+                    if_true: Box::new(if_true_opt),
+                    if_false: Box::new(if_false_opt),
+                }
+            }
+            leaf => leaf,
+        }
+    }
+}
+
+impl Default for GraphOptimizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -874,7 +1167,8 @@ mod tests {
     #[test]
     fn test_graph_optimizer() {
         let node = ComputationNode::leaf(|| 1.0);
-        let optimized = GraphOptimizer::optimize(node);
+        let mut optimizer = GraphOptimizer::new();
+        let optimized = optimizer.optimize(node);
 
         // Currently optimization is a no-op, but this tests the interface
         assert_eq!(optimized.node_count(), 1);

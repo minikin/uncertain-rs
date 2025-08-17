@@ -7,6 +7,7 @@
 
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::sync::atomic::AtomicUsize;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -20,6 +21,8 @@ static DIST_CACHE: std::sync::LazyLock<DistributionCache> =
 pub struct TtlCache<K, V> {
     data: Arc<RwLock<HashMap<K, CacheEntry<V>>>>,
     ttl: Duration,
+    hit_count: Arc<AtomicUsize>,
+    miss_count: Arc<AtomicUsize>,
 }
 
 struct CacheEntry<V> {
@@ -38,6 +41,8 @@ where
         Self {
             data: Arc::new(RwLock::new(HashMap::new())),
             ttl,
+            hit_count: Arc::new(AtomicUsize::new(0)),
+            miss_count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
@@ -47,8 +52,12 @@ where
         let entry = cache.get(key)?;
 
         if entry.created_at.elapsed() < self.ttl {
+            self.hit_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Some(entry.value.clone())
         } else {
+            self.miss_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             None
         }
     }
@@ -75,6 +84,8 @@ where
             return cached;
         }
 
+        self.miss_count
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let value = compute_fn();
         self.insert(key, value.clone());
         value
@@ -104,6 +115,35 @@ where
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    /// Get cache hit rate as a percentage
+    #[must_use]
+    pub fn hit_rate(&self) -> f64 {
+        let hits = self.hit_count.load(std::sync::atomic::Ordering::Relaxed);
+        let misses = self.miss_count.load(std::sync::atomic::Ordering::Relaxed);
+        let total = hits + misses;
+        if total == 0 {
+            0.0
+        } else {
+            (hits as f64 / total as f64) * 100.0
+        }
+    }
+
+    /// Get cache statistics
+    #[must_use]
+    pub fn cache_stats(&self) -> CacheStats {
+        let hits = self.hit_count.load(std::sync::atomic::Ordering::Relaxed);
+        let misses = self.miss_count.load(std::sync::atomic::Ordering::Relaxed);
+        CacheStats { hits, misses }
+    }
+
+    /// Reset cache statistics
+    pub fn reset_stats(&self) {
+        self.hit_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.miss_count
+            .store(0, std::sync::atomic::Ordering::Relaxed);
     }
 }
 
@@ -203,7 +243,7 @@ impl StatisticsCache {
     where
         F: FnOnce() -> (f64, f64),
     {
-        let confidence_key = (confidence * 1000.0) as u64;
+        let confidence_key = Self::quantize_float(confidence, 0.001);
         self.confidence_intervals
             .get_or_compute((id, sample_count, confidence_key), compute)
     }
@@ -219,7 +259,7 @@ impl StatisticsCache {
     where
         F: FnOnce() -> f64,
     {
-        let value_key = (value * 1000.0) as u64;
+        let value_key = Self::quantize_float(value, 0.001);
         self.cdf
             .get_or_compute((id, sample_count, value_key), compute)
     }
@@ -235,7 +275,7 @@ impl StatisticsCache {
     where
         F: FnOnce() -> f64,
     {
-        let q_key = (q * 1000.0) as u64;
+        let q_key = Self::quantize_float(q, 0.001);
         self.quantiles
             .get_or_compute((id, sample_count, q_key), compute)
     }
@@ -262,6 +302,40 @@ impl StatisticsCache {
         self.confidence_intervals.cleanup_expired();
         self.cdf.cleanup_expired();
         self.quantiles.cleanup_expired();
+    }
+
+    /// Quantize a floating-point value to improve cache hit rates
+    /// by rounding to a specified precision
+    fn quantize_float(value: f64, precision: f64) -> u64 {
+        (value / precision).round() as u64
+    }
+
+    /// Get overall cache statistics across all caches
+    #[must_use]
+    pub fn overall_stats(&self) -> CacheStats {
+        let mut total_hits = 0;
+        let mut total_misses = 0;
+
+        let stats = [
+            self.expected_value.cache_stats(),
+            self.variance.cache_stats(),
+            self.std_dev.cache_stats(),
+            self.skewness.cache_stats(),
+            self.kurtosis.cache_stats(),
+            self.confidence_intervals.cache_stats(),
+            self.cdf.cache_stats(),
+            self.quantiles.cache_stats(),
+        ];
+
+        for stat in &stats {
+            total_hits += stat.hits;
+            total_misses += stat.misses;
+        }
+
+        CacheStats {
+            hits: total_hits,
+            misses: total_misses,
+        }
     }
 }
 
@@ -313,8 +387,8 @@ impl DistributionCache {
     where
         F: FnOnce() -> f64,
     {
-        let x_key = (x * 1000.0) as u64;
-        let bandwidth_key = (bandwidth * 1000.0) as u64;
+        let x_key = StatisticsCache::quantize_float(x, 0.001);
+        let bandwidth_key = StatisticsCache::quantize_float(bandwidth, 0.0001);
         self.pdf_kde
             .get_or_compute((id, sample_count, x_key, bandwidth_key), compute)
     }
@@ -330,11 +404,42 @@ impl DistributionCache {
         self.samples.cleanup_expired();
         self.pdf_kde.cleanup_expired();
     }
+
+    /// Get overall cache statistics across all distribution caches
+    #[must_use]
+    pub fn overall_stats(&self) -> CacheStats {
+        let samples_stats = self.samples.cache_stats();
+        let pdf_stats = self.pdf_kde.cache_stats();
+
+        CacheStats {
+            hits: samples_stats.hits + pdf_stats.hits,
+            misses: samples_stats.misses + pdf_stats.misses,
+        }
+    }
 }
 
 impl Default for DistributionCache {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Cache performance statistics
+#[derive(Debug, Clone, Copy)]
+pub struct CacheStats {
+    pub hits: usize,
+    pub misses: usize,
+}
+
+impl CacheStats {
+    #[must_use]
+    pub fn hit_rate(&self) -> f64 {
+        let total = self.hits + self.misses;
+        if total == 0 {
+            0.0
+        } else {
+            (self.hits as f64 / total as f64) * 100.0
+        }
     }
 }
 
@@ -360,6 +465,39 @@ pub fn cleanup_global_caches() {
 pub fn clear_global_caches() {
     STATS_CACHE.clear_all();
     DIST_CACHE.clear_all();
+}
+
+/// Get global cache statistics
+#[must_use]
+pub fn global_cache_stats() -> (CacheStats, CacheStats) {
+    (STATS_CACHE.overall_stats(), DIST_CACHE.overall_stats())
+}
+
+/// Print a comprehensive cache performance report
+pub fn print_cache_report() {
+    let (stats_stats, dist_stats) = global_cache_stats();
+
+    println!("=== Cache Performance Report ===");
+    println!("\nStatistics Cache:");
+    println!("  Hits: {}", stats_stats.hits);
+    println!("  Misses: {}", stats_stats.misses);
+    println!("  Hit Rate: {:.2}%", stats_stats.hit_rate());
+
+    println!("\nDistribution Cache:");
+    println!("  Hits: {}", dist_stats.hits);
+    println!("  Misses: {}", dist_stats.misses);
+    println!("  Hit Rate: {:.2}%", dist_stats.hit_rate());
+
+    let total_hits = stats_stats.hits + dist_stats.hits;
+    let total_misses = stats_stats.misses + dist_stats.misses;
+    let total_requests = total_hits + total_misses;
+
+    if total_requests > 0 {
+        let overall_hit_rate = (total_hits as f64 / total_requests as f64) * 100.0;
+        println!("\nOverall:");
+        println!("  Total Requests: {total_requests}");
+        println!("  Overall Hit Rate: {overall_hit_rate:.2}%");
+    }
 }
 
 #[cfg(test)]

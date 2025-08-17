@@ -29,7 +29,7 @@ impl<T> Arithmetic for T where
 }
 
 /// Binary operation types for computation graph
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub enum BinaryOperation {
     Add,
     Sub,
