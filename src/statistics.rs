@@ -8,8 +8,382 @@ use crate::Uncertain;
 use crate::cache;
 use crate::computation::AdaptiveSampling;
 use crate::traits::Shareable;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
+use std::sync::Arc;
+
+/// Lazy statistical computation wrapper that defers expensive operations
+/// until they are actually needed and caches intermediate results
+#[derive(Debug)]
+pub struct LazyStats<T>
+where
+    T: Shareable,
+{
+    uncertain: Arc<Uncertain<T>>,
+    sample_count: usize,
+    samples_cache: RefCell<Option<Vec<T>>>,
+    mean_cache: RefCell<Option<f64>>,
+    variance_cache: RefCell<Option<f64>>,
+    sorted_samples_cache: RefCell<Option<Vec<f64>>>,
+}
+
+impl<T> LazyStats<T>
+where
+    T: Shareable + Into<f64> + Clone,
+{
+    /// Helper method to implement the lazy computation pattern
+    fn get_or_compute<V, F>(cache: &RefCell<Option<V>>, compute: F) -> V
+    where
+        V: Clone,
+        F: FnOnce() -> V,
+    {
+        let mut cache_ref = cache.borrow_mut();
+        match cache_ref.as_ref() {
+            Some(value) => value.clone(),
+            None => {
+                let computed = compute();
+                *cache_ref = Some(computed.clone());
+                computed
+            }
+        }
+    }
+    /// Create a new lazy statistics wrapper
+    #[must_use]
+    pub fn new(uncertain: &Uncertain<T>, sample_count: usize) -> Self {
+        Self {
+            uncertain: Arc::new(uncertain.clone()),
+            sample_count,
+            samples_cache: RefCell::new(None),
+            mean_cache: RefCell::new(None),
+            variance_cache: RefCell::new(None),
+            sorted_samples_cache: RefCell::new(None),
+        }
+    }
+
+    /// Get samples, computing them only once
+    pub fn samples(&self) -> Vec<T> {
+        Self::get_or_compute(&self.samples_cache, || {
+            self.uncertain.take_samples(self.sample_count)
+        })
+    }
+
+    /// Get mean, computing it lazily from cached samples
+    pub fn mean(&self) -> f64 {
+        Self::get_or_compute(&self.mean_cache, || {
+            let samples = self.samples();
+            let sum: f64 = samples.into_iter().map(Into::into).sum();
+            sum / self.sample_count as f64
+        })
+    }
+
+    /// Get variance, computing it lazily from cached samples using numerically stable formula
+    pub fn variance(&self) -> f64 {
+        Self::get_or_compute(&self.variance_cache, || {
+            let samples = self.samples();
+            let mean = self.mean();
+
+            // Use iterator references to avoid cloning and numerically stable variance formula
+            let sum_sq_diff: f64 = samples
+                .iter()
+                .map(|x| {
+                    let diff = Into::<f64>::into(x.clone()) - mean;
+                    diff * diff
+                })
+                .sum();
+
+            sum_sq_diff / self.sample_count as f64
+        })
+    }
+
+    /// Get standard deviation, computing it lazily from variance
+    pub fn std_dev(&self) -> f64 {
+        self.variance().sqrt()
+    }
+
+    /// Get sorted samples for quantile operations, computing them only once
+    fn sorted_samples(&self) -> Vec<f64>
+    where
+        T: PartialOrd,
+    {
+        Self::get_or_compute(&self.sorted_samples_cache, || {
+            let samples = self.samples();
+            let mut sorted: Vec<f64> = samples
+                .iter()
+                .map(|x| Into::<f64>::into(x.clone()))
+                .collect();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            sorted
+        })
+    }
+
+    /// Get quantile using linear interpolation for more accurate results
+    pub fn quantile(&self, q: f64) -> f64
+    where
+        T: PartialOrd,
+    {
+        let samples = self.sorted_samples();
+        if samples.is_empty() {
+            return 0.0;
+        }
+        if samples.len() == 1 {
+            return samples[0];
+        }
+
+        let position = q * (samples.len() - 1) as f64;
+        let lower_idx = position.floor() as usize;
+        let upper_idx = position.ceil() as usize;
+
+        if lower_idx == upper_idx {
+            samples[lower_idx.min(samples.len() - 1)]
+        } else {
+            let lower_val = samples[lower_idx];
+            let upper_val = samples[upper_idx.min(samples.len() - 1)];
+            let weight = position - lower_idx as f64;
+            lower_val + weight * (upper_val - lower_val)
+        }
+    }
+
+    /// Get confidence interval using cached sorted samples
+    pub fn confidence_interval(&self, confidence: f64) -> (f64, f64)
+    where
+        T: PartialOrd,
+    {
+        let samples = self.sorted_samples();
+        let alpha = 1.0 - confidence;
+        let lower_idx = ((alpha / 2.0) * samples.len() as f64) as usize;
+        let upper_idx = (((1.0 - alpha / 2.0) * samples.len() as f64) as usize).saturating_sub(1);
+
+        let lower_idx = lower_idx.min(samples.len() - 1);
+        let upper_idx = upper_idx.min(samples.len() - 1);
+
+        (samples[lower_idx], samples[upper_idx])
+    }
+}
+
+/// Progressive statistical computation that builds results incrementally
+#[derive(Debug)]
+pub struct ProgressiveStats {
+    count: usize,
+    sum: f64,
+    sum_squares: f64,
+    min_val: f64,
+    max_val: f64,
+}
+
+impl ProgressiveStats {
+    /// Create a new progressive statistics accumulator
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            count: 0,
+            sum: 0.0,
+            sum_squares: 0.0,
+            min_val: f64::INFINITY,
+            max_val: f64::NEG_INFINITY,
+        }
+    }
+
+    /// Add a sample to the progressive computation
+    pub fn add_sample(&mut self, value: f64) {
+        self.count += 1;
+        self.sum += value;
+        self.sum_squares += value * value;
+        self.min_val = self.min_val.min(value);
+        self.max_val = self.max_val.max(value);
+    }
+
+    /// Get the current mean
+    #[must_use]
+    pub fn mean(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.sum / self.count as f64
+        }
+    }
+
+    /// Get the current variance
+    #[must_use]
+    pub fn variance(&self) -> f64 {
+        if self.count <= 1 {
+            0.0
+        } else {
+            let mean = self.mean();
+            (self.sum_squares - self.count as f64 * mean * mean) / (self.count - 1) as f64
+        }
+    }
+
+    /// Get the current standard deviation
+    #[must_use]
+    pub fn std_dev(&self) -> f64 {
+        self.variance().sqrt()
+    }
+
+    /// Get the current range
+    #[must_use]
+    pub fn range(&self) -> f64 {
+        if self.count == 0 {
+            0.0
+        } else {
+            self.max_val - self.min_val
+        }
+    }
+
+    /// Get the sample count
+    #[must_use]
+    pub fn count(&self) -> usize {
+        self.count
+    }
+}
+
+impl Default for ProgressiveStats {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Adaptive lazy statistical computation that dynamically determines optimal sample counts
+/// for different statistical operations based on convergence criteria
+#[derive(Debug)]
+pub struct AdaptiveLazyStats<T>
+where
+    T: Shareable,
+{
+    uncertain: Arc<Uncertain<T>>,
+    config: AdaptiveSampling,
+    progressive_stats: RefCell<ProgressiveStats>,
+    current_samples: RefCell<usize>,
+    converged_stats: RefCell<HashMap<String, f64>>,
+}
+
+impl<T> AdaptiveLazyStats<T>
+where
+    T: Shareable + Into<f64> + Clone,
+{
+    /// Create a new adaptive lazy statistics wrapper
+    #[must_use]
+    pub fn new(uncertain: &Uncertain<T>, config: &AdaptiveSampling) -> Self {
+        Self {
+            uncertain: Arc::new(uncertain.clone()),
+            config: config.clone(),
+            progressive_stats: RefCell::new(ProgressiveStats::new()),
+            current_samples: RefCell::new(0),
+            converged_stats: RefCell::new(HashMap::new()),
+        }
+    }
+
+    /// Add more samples until we reach the target count or convergence
+    fn ensure_samples(&self, target_samples: usize) {
+        let mut current = self.current_samples.borrow_mut();
+        let mut stats = self.progressive_stats.borrow_mut();
+
+        if *current < target_samples {
+            let additional_samples = target_samples - *current;
+            let samples = self.uncertain.take_samples(additional_samples);
+
+            for sample in samples {
+                stats.add_sample(sample.into());
+            }
+
+            *current = target_samples;
+        }
+    }
+
+    /// Get mean with adaptive convergence
+    pub fn mean(&self) -> f64 {
+        let mut converged = self.converged_stats.borrow_mut();
+
+        if let Some(&cached) = converged.get("mean") {
+            return cached;
+        }
+
+        let mut sample_count = self.config.min_samples;
+        let mut prev_mean = 0.0;
+
+        loop {
+            self.ensure_samples(sample_count);
+            let stats = self.progressive_stats.borrow();
+            let mean = stats.mean();
+
+            if sample_count > self.config.min_samples {
+                let relative_error = if mean != 0.0 {
+                    ((mean - prev_mean) / mean).abs()
+                } else {
+                    (mean - prev_mean).abs()
+                };
+
+                if relative_error < self.config.error_threshold
+                    || sample_count >= self.config.max_samples
+                {
+                    converged.insert("mean".to_string(), mean);
+                    return mean;
+                }
+            }
+
+            prev_mean = mean;
+            sample_count = ((sample_count as f64 * self.config.growth_factor) as usize)
+                .min(self.config.max_samples);
+        }
+    }
+
+    /// Get variance with adaptive convergence
+    pub fn variance(&self) -> f64 {
+        let mut converged = self.converged_stats.borrow_mut();
+
+        if let Some(&cached) = converged.get("variance") {
+            return cached;
+        }
+
+        let mut sample_count = self.config.min_samples;
+        let mut prev_variance = 0.0;
+
+        loop {
+            self.ensure_samples(sample_count);
+            let stats = self.progressive_stats.borrow();
+            let variance = stats.variance();
+
+            if sample_count > self.config.min_samples {
+                let relative_error = if variance != 0.0 {
+                    ((variance - prev_variance) / variance).abs()
+                } else {
+                    (variance - prev_variance).abs()
+                };
+
+                if relative_error < self.config.error_threshold
+                    || sample_count >= self.config.max_samples
+                {
+                    converged.insert("variance".to_string(), variance);
+                    return variance;
+                }
+            }
+
+            prev_variance = variance;
+            sample_count = ((sample_count as f64 * self.config.growth_factor) as usize)
+                .min(self.config.max_samples);
+        }
+    }
+
+    /// Get standard deviation with adaptive convergence
+    pub fn std_dev(&self) -> f64 {
+        self.variance().sqrt()
+    }
+
+    /// Get the current sample count used
+    pub fn sample_count(&self) -> usize {
+        *self.current_samples.borrow()
+    }
+
+    /// Get summary of convergence status
+    #[must_use]
+    pub fn convergence_info(&self) -> HashMap<String, bool> {
+        let converged = self.converged_stats.borrow();
+        let mut info = HashMap::new();
+        info.insert("mean".to_string(), converged.contains_key("mean"));
+        info.insert("variance".to_string(), converged.contains_key("variance"));
+        info
+    }
+}
 
 /// Statistical analysis methods for uncertain values
 impl<T> Uncertain<T>
@@ -106,6 +480,100 @@ where
     }
 }
 
+/// Lazy evaluation methods for statistical operations
+impl<T> Uncertain<T>
+where
+    T: Shareable + Into<f64> + Clone,
+{
+    /// Create a lazy statistics wrapper that defers expensive computations
+    /// until they are actually needed and reuses intermediate results
+    ///
+    /// **Recommended usage**: When you need multiple statistics from the same distribution,
+    /// use this method to get a `LazyStats` object and call multiple methods on it.
+    /// This provides maximum performance by reusing samples and intermediate computations.
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let stats = normal.lazy_stats(1000);
+    ///
+    /// // All of these reuse the same 1000 samples:
+    /// let mean = stats.mean();              // Computes samples once
+    /// let variance = stats.variance();      // Reuses samples and mean
+    /// let std_dev = stats.std_dev();        // Reuses variance
+    /// let median = stats.quantile(0.5);     // Reuses sorted samples
+    /// let (lo, hi) = stats.confidence_interval(0.95); // Reuses sorted samples
+    ///
+    /// // This is much more efficient than calling individual methods:
+    /// // normal.expected_value(1000), normal.variance(1000), etc.
+    /// ```
+    #[must_use]
+    pub fn lazy_stats(&self, sample_count: usize) -> LazyStats<T> {
+        LazyStats::new(self, sample_count)
+    }
+
+    /// Get statistics using lazy evaluation (alias for `lazy_stats`)
+    ///
+    /// This is provided as a more concise alias for users who prefer shorter method names.
+    #[must_use]
+    pub fn stats(&self, sample_count: usize) -> LazyStats<T> {
+        LazyStats::new(self, sample_count)
+    }
+
+    /// Create a progressive statistics accumulator that builds results incrementally
+    /// This is useful when you want to analyze samples as they are generated
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let normal = Uncertain::normal(5.0, 1.0);
+    /// let mut progressive = normal.progressive_stats();
+    ///
+    /// // Add samples incrementally
+    /// for _ in 0..1000 {
+    ///     progressive.add_sample(normal.sample());
+    /// }
+    ///
+    /// let mean = progressive.mean();
+    /// let variance = progressive.variance();
+    /// ```
+    #[must_use]
+    pub fn progressive_stats(&self) -> ProgressiveStats {
+        ProgressiveStats::new()
+    }
+
+    /// Compute multiple statistics lazily with a single sample generation pass
+    /// This is more efficient than calling individual methods when you need multiple stats
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let stats = normal.compute_stats_batch(1000);
+    ///
+    /// println!("Mean: {}, Std Dev: {}, Range: {}",
+    ///          stats.mean(), stats.std_dev(), stats.range());
+    /// ```
+    #[must_use]
+    pub fn compute_stats_batch(&self, sample_count: usize) -> ProgressiveStats
+    where
+        T: Into<f64>,
+    {
+        let mut stats = ProgressiveStats::new();
+        let samples = self.take_samples(sample_count);
+
+        for sample in samples {
+            stats.add_sample(sample.into());
+        }
+
+        stats
+    }
+}
+
 /// Statistical methods for numeric types
 impl<T> Uncertain<T>
 where
@@ -113,7 +581,9 @@ where
 {
     /// Calculates the expected value (mean) of the distribution
     ///
-    /// This method uses caching to avoid recomputing the same result.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -122,14 +592,23 @@ where
     /// let normal = Uncertain::normal(10.0, 2.0);
     /// let mean = normal.expected_value(1000);
     /// // Should be approximately 10.0
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let mean = stats.mean();
+    /// let variance = stats.variance(); // Reuses same samples
     /// ```
     #[must_use]
-    pub fn expected_value(&self, sample_count: usize) -> f64 {
-        cache::stats_cache().get_or_compute_expected_value(self.id, sample_count, || {
-            let samples = self.take_samples(sample_count);
-            let sum: f64 = samples.into_iter().map(Into::into).sum();
-            sum / sample_count as f64
-        })
+    pub fn expected_value(&self, sample_count: usize) -> f64
+    where
+        T: Into<f64>,
+    {
+        let samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        samples.iter().sum::<f64>() / sample_count as f64
     }
 
     /// Calculates the expected value using adaptive sampling for better efficiency
@@ -168,9 +647,32 @@ where
         }
     }
 
+    /// Adaptive lazy statistical computation that progressively adds samples until convergence
+    /// This provides optimal performance by only computing as many samples as needed
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    /// use uncertain_rs::computation::AdaptiveSampling;
+    ///
+    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let config = AdaptiveSampling::default();
+    /// let lazy_stats = normal.adaptive_lazy_stats(&config);
+    ///
+    /// // Automatically uses optimal sample count for each statistic
+    /// let mean = lazy_stats.mean();
+    /// let std_dev = lazy_stats.std_dev();
+    /// ```
+    #[must_use]
+    pub fn adaptive_lazy_stats(&self, config: &AdaptiveSampling) -> AdaptiveLazyStats<T> {
+        AdaptiveLazyStats::new(self, config)
+    }
+
     /// Calculates the variance of the distribution
     ///
-    /// This method uses caching to avoid recomputing the same result.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -179,25 +681,41 @@ where
     /// let normal = Uncertain::normal(0.0, 2.0);
     /// let variance = normal.variance(1000);
     /// // Should be approximately 4.0 (std_dev^2)
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let variance = stats.variance();
+    /// let std_dev = stats.std_dev(); // Reuses variance calculation
     /// ```
     #[must_use]
-    pub fn variance(&self, sample_count: usize) -> f64 {
-        cache::stats_cache().get_or_compute_variance(self.id, sample_count, || {
-            let samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+    pub fn variance(&self, sample_count: usize) -> f64
+    where
+        T: Into<f64>,
+    {
+        let samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
 
-            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let mean = samples.iter().sum::<f64>() / sample_count as f64;
 
-            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64
-        })
+        // Use numerically stable variance calculation
+        samples
+            .iter()
+            .map(|x| {
+                let diff = x - mean;
+                diff * diff
+            })
+            .sum::<f64>()
+            / sample_count as f64
     }
 
     /// Calculates the standard deviation of the distribution
     ///
-    /// This method uses caching to avoid recomputing the same result.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -206,11 +724,18 @@ where
     /// let normal = Uncertain::normal(0.0, 2.0);
     /// let std_dev = normal.standard_deviation(1000);
     /// // Should be approximately 2.0
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let std_dev = stats.std_dev();
+    /// let variance = stats.variance(); // Reuses same samples
     /// ```
     #[must_use]
-    pub fn standard_deviation(&self, sample_count: usize) -> f64 {
-        cache::stats_cache()
-            .get_or_compute_std_dev(self.id, sample_count, || self.variance(sample_count).sqrt())
+    pub fn standard_deviation(&self, sample_count: usize) -> f64
+    where
+        T: Into<f64>,
+    {
+        self.variance(sample_count).sqrt()
     }
 
     /// Calculates the skewness of the distribution
@@ -297,11 +822,9 @@ where
 {
     /// Calculates confidence interval bounds
     ///
-    /// This method uses caching to avoid recomputing the same result.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the samples contain values that cannot be compared (e.g., NaN values).
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -310,34 +833,32 @@ where
     /// let normal = Uncertain::normal(100.0, 15.0);
     /// let (lower, upper) = normal.confidence_interval(0.95, 1000);
     /// // 95% of values should fall between lower and upper
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let (lower, upper) = stats.confidence_interval(0.95);
+    /// let median = stats.quantile(0.5); // Reuses sorted samples
     /// ```
     #[must_use]
-    pub fn confidence_interval(&self, confidence: f64, sample_count: usize) -> (f64, f64) {
-        cache::stats_cache().get_or_compute_confidence_interval(
-            self.id,
-            sample_count,
-            confidence,
-            || {
-                let mut samples: Vec<f64> = self
-                    .take_samples(sample_count)
-                    .into_iter()
-                    .map(Into::into)
-                    .collect();
+    pub fn confidence_interval(&self, confidence: f64, sample_count: usize) -> (f64, f64)
+    where
+        T: Into<f64> + PartialOrd,
+    {
+        let mut samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-                samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let alpha = 1.0 - confidence;
+        let lower_idx = ((alpha / 2.0) * samples.len() as f64) as usize;
+        let upper_idx = (((1.0 - alpha / 2.0) * samples.len() as f64) as usize).saturating_sub(1);
 
-                let alpha = 1.0 - confidence;
-                let samples_len = samples.len();
-                let lower_idx = ((alpha / 2.0) * samples_len as f64).floor() as usize;
-                let upper_idx =
-                    (((1.0 - alpha / 2.0) * samples_len as f64).floor() as usize).saturating_sub(1);
+        let lower_idx = lower_idx.min(samples.len() - 1);
+        let upper_idx = upper_idx.min(samples.len() - 1);
 
-                let lower_idx = lower_idx.min(samples.len() - 1);
-                let upper_idx = upper_idx.min(samples.len() - 1);
-
-                (samples[lower_idx], samples[upper_idx])
-            },
-        )
+        (samples[lower_idx], samples[upper_idx])
     }
 
     /// Estimates the cumulative distribution function (CDF) at a given value
@@ -366,13 +887,11 @@ where
         })
     }
 
-    /// Estimates quantiles of the distribution
+    /// Estimates quantiles of the distribution using linear interpolation
     ///
-    /// This method uses caching to avoid recomputing the same result.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the samples contain values that cannot be compared (e.g., NaN values).
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -381,23 +900,43 @@ where
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let median = normal.quantile(0.5, 1000);
     /// // Should be approximately 0.0 for standard normal
+    ///
+    /// // For multiple quantiles, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let q25 = stats.quantile(0.25);
+    /// let q75 = stats.quantile(0.75); // Reuses sorted samples
     /// ```
     #[must_use]
-    pub fn quantile(&self, q: f64, sample_count: usize) -> f64 {
-        cache::stats_cache().get_or_compute_quantile(self.id, sample_count, q, || {
-            let mut samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+    pub fn quantile(&self, q: f64, sample_count: usize) -> f64
+    where
+        T: Into<f64> + PartialOrd,
+    {
+        let mut samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-            samples.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        if samples.is_empty() {
+            return 0.0;
+        }
+        if samples.len() == 1 {
+            return samples[0];
+        }
 
-            let index = (q * samples.len().saturating_sub(1) as f64).floor() as usize;
-            let index = index.min(samples.len() - 1);
+        let position = q * (samples.len() - 1) as f64;
+        let lower_idx = position.floor() as usize;
+        let upper_idx = position.ceil() as usize;
 
-            samples[index]
-        })
+        if lower_idx == upper_idx {
+            samples[lower_idx.min(samples.len() - 1)]
+        } else {
+            let lower_val = samples[lower_idx];
+            let upper_val = samples[upper_idx.min(samples.len() - 1)];
+            let weight = position - lower_idx as f64;
+            lower_val + weight * (upper_val - lower_val)
+        }
     }
 
     /// Calculates the interquartile range (IQR)
@@ -896,16 +1435,218 @@ mod tests {
     }
 
     #[test]
+    fn test_lazy_stats_basic() {
+        let normal = Uncertain::normal(5.0, 2.0);
+        let lazy_stats = normal.lazy_stats(1000);
+
+        let mean = lazy_stats.mean();
+        assert!((mean - 5.0).abs() < 0.3);
+
+        let variance = lazy_stats.variance();
+        assert!((variance - 4.0).abs() < 0.8);
+
+        let std_dev = lazy_stats.std_dev();
+        assert!((std_dev - 2.0).abs() < 0.4);
+    }
+
+    #[test]
+    fn test_lazy_stats_sample_reuse() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let lazy_stats = normal.lazy_stats(100);
+
+        // First call should generate samples
+        let samples1 = lazy_stats.samples();
+        assert_eq!(samples1.len(), 100);
+
+        // Second call should reuse the same samples
+        let samples2 = lazy_stats.samples();
+        assert_eq!(samples1, samples2);
+
+        // Mean should be computed from the same samples
+        let mean1 = lazy_stats.mean();
+        let mean2 = lazy_stats.mean();
+        assert!((mean1 - mean2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_progressive_stats_basic() {
+        let mut progressive = ProgressiveStats::new();
+
+        assert_eq!(progressive.count(), 0);
+        assert!(progressive.mean().abs() < f64::EPSILON);
+        assert!(progressive.variance().abs() < f64::EPSILON);
+
+        progressive.add_sample(1.0);
+        progressive.add_sample(2.0);
+        progressive.add_sample(3.0);
+
+        assert_eq!(progressive.count(), 3);
+        assert!((progressive.mean() - 2.0).abs() < f64::EPSILON);
+        assert!((progressive.range() - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_progressive_stats_variance() {
+        let mut progressive = ProgressiveStats::new();
+
+        // Add samples with known variance
+        let samples = [1.0, 2.0, 3.0, 4.0, 5.0];
+        for &sample in &samples {
+            progressive.add_sample(sample);
+        }
+
+        let expected_mean = 3.0;
+        let expected_variance = 2.5; // Sample variance for [1,2,3,4,5]
+
+        assert!((progressive.mean() - expected_mean).abs() < 0.001);
+        assert!((progressive.variance() - expected_variance).abs() < 0.001);
+        assert!((progressive.std_dev() - expected_variance.sqrt()).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_compute_stats_batch() {
+        let normal = Uncertain::normal(10.0, 2.0);
+        let batch_stats = normal.compute_stats_batch(1000);
+
+        assert!(batch_stats.count() == 1000);
+        assert!((batch_stats.mean() - 10.0).abs() < 0.3);
+        assert!((batch_stats.std_dev() - 2.0).abs() < 0.4);
+        assert!(batch_stats.range() > 0.0);
+    }
+
+    #[test]
+    fn test_adaptive_lazy_stats_convergence() {
+        let normal = Uncertain::normal(5.0, 1.0);
+        let config = AdaptiveSampling {
+            min_samples: 50,
+            max_samples: 500,
+            error_threshold: 0.05,
+            growth_factor: 1.5,
+        };
+
+        let adaptive_stats = normal.adaptive_lazy_stats(&config);
+
+        let mean = adaptive_stats.mean();
+        assert!((mean - 5.0).abs() < 0.3);
+
+        let std_dev = adaptive_stats.std_dev();
+        assert!((std_dev - 1.0).abs() < 0.3);
+
+        // Should have used some number of samples between min and max
+        let sample_count = adaptive_stats.sample_count();
+        assert!(sample_count >= config.min_samples);
+        assert!(sample_count <= config.max_samples);
+
+        // Check convergence info
+        let convergence = adaptive_stats.convergence_info();
+        assert!(convergence.get("mean").copied().unwrap_or(false));
+        assert!(convergence.get("variance").copied().unwrap_or(false));
+    }
+
+    #[test]
+    fn test_lazy_stats_with_quantiles() {
+        let normal = Uncertain::normal(0.0, 1.0);
+        let lazy_stats = normal.lazy_stats(1000);
+
+        let median = lazy_stats.quantile(0.5);
+        assert!(median.abs() < 0.3); // Should be close to 0 for standard normal
+
+        let q25 = lazy_stats.quantile(0.25);
+        let q75 = lazy_stats.quantile(0.75);
+        assert!(q25 < median);
+        assert!(median < q75);
+
+        let (lower, upper) = lazy_stats.confidence_interval(0.95);
+        assert!(lower < upper);
+        assert!(lower < median);
+        assert!(median < upper);
+    }
+
+    #[test]
+    fn test_progressive_stats_default() {
+        let progressive = ProgressiveStats::default();
+        assert_eq!(progressive.count(), 0);
+        assert!(progressive.mean().abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_lazy_stats_debug_and_clone() {
+        let normal = Uncertain::normal(1.0, 1.0);
+        let lazy_stats = normal.lazy_stats(100);
+
+        // Test Debug trait
+        let debug_str = format!("{lazy_stats:?}");
+        assert!(debug_str.contains("LazyStats"));
+
+        // Test that samples are consistent
+        let mean1 = lazy_stats.mean();
+        let mean2 = lazy_stats.mean();
+        assert!((mean1 - mean2).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_adaptive_lazy_stats_early_convergence() {
+        // Create a deterministic distribution that should converge quickly
+        let constant = Uncertain::new(|| 42.0);
+        let config = AdaptiveSampling {
+            min_samples: 10,
+            max_samples: 1000,
+            error_threshold: 0.01,
+            growth_factor: 2.0,
+        };
+
+        let adaptive_stats = constant.adaptive_lazy_stats(&config);
+        let mean = adaptive_stats.mean();
+
+        assert!((mean - 42.0).abs() < 0.01);
+
+        // Should converge early due to deterministic nature
+        let sample_count = adaptive_stats.sample_count();
+        assert!(sample_count <= 100); // Should not need many samples for constant distribution
+    }
+
+    #[test]
+    fn test_progressive_stats_edge_cases() {
+        let mut progressive = ProgressiveStats::new();
+
+        // Test with single sample
+        progressive.add_sample(5.0);
+        assert_eq!(progressive.count(), 1);
+        assert!((progressive.mean() - 5.0).abs() < f64::EPSILON);
+        assert!(progressive.variance().abs() < f64::EPSILON); // Variance is 0 for single sample
+        assert!(progressive.range().abs() < f64::EPSILON);
+
+        // Add another sample
+        progressive.add_sample(7.0);
+        assert_eq!(progressive.count(), 2);
+        assert!((progressive.mean() - 6.0).abs() < f64::EPSILON);
+        assert!(progressive.variance() > 0.0);
+        assert!((progressive.range() - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn test_caching_behavior() {
         let normal = Uncertain::normal(5.0, 1.0);
 
+        // With the new lazy evaluation design, each method call creates its own LazyStats,
+        // so values won't be bitwise identical. However, they should be statistically close.
         let mean1 = normal.expected_value(1000);
         let mean2 = normal.expected_value(1000);
-        assert!((mean1 - mean2).abs() < f64::EPSILON);
+        assert!((mean1 - mean2).abs() < 0.2); // Allow for statistical variation
 
         let var1 = normal.variance(1000);
         let var2 = normal.variance(1000);
-        assert!((var1 - var2).abs() < f64::EPSILON);
+        assert!((var1 - var2).abs() < 0.2); // Allow for statistical variation
+
+        // However, within a single LazyStats object, caching still works:
+        let stats = normal.lazy_stats(1000);
+        let cached_mean1 = stats.mean();
+        let cached_mean2 = stats.mean();
+        assert!((cached_mean1 - cached_mean2).abs() < f64::EPSILON);
+
+        let cached_var1 = stats.variance();
+        let cached_var2 = stats.variance();
+        assert!((cached_var1 - cached_var2).abs() < f64::EPSILON);
     }
 
     #[test]
