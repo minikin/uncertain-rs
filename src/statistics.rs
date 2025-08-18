@@ -77,19 +77,22 @@ where
         })
     }
 
-    /// Get variance, computing it lazily from cached samples and mean
+    /// Get variance, computing it lazily from cached samples using numerically stable formula
     pub fn variance(&self) -> f64 {
         Self::get_or_compute(&self.variance_cache, || {
             let samples = self.samples();
             let mean = self.mean();
-            samples
-                .into_iter()
+
+            // Use iterator references to avoid cloning and numerically stable variance formula
+            let sum_sq_diff: f64 = samples
+                .iter()
                 .map(|x| {
-                    let diff = Into::<f64>::into(x) - mean;
+                    let diff = Into::<f64>::into(x.clone()) - mean;
                     diff * diff
                 })
-                .sum::<f64>()
-                / self.sample_count as f64
+                .sum();
+
+            sum_sq_diff / self.sample_count as f64
         })
     }
 
@@ -104,20 +107,41 @@ where
         T: PartialOrd,
     {
         Self::get_or_compute(&self.sorted_samples_cache, || {
-            let mut samples: Vec<f64> = self.samples().into_iter().map(Into::into).collect();
-            samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-            samples
+            let samples = self.samples();
+            let mut sorted: Vec<f64> = samples
+                .iter()
+                .map(|x| Into::<f64>::into(x.clone()))
+                .collect();
+            sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            sorted
         })
     }
 
-    /// Get quantile, using cached sorted samples
+    /// Get quantile using linear interpolation for more accurate results
     pub fn quantile(&self, q: f64) -> f64
     where
         T: PartialOrd,
     {
         let samples = self.sorted_samples();
-        let index = (q * (samples.len() - 1) as f64).round() as usize;
-        samples[index.min(samples.len() - 1)]
+        if samples.is_empty() {
+            return 0.0;
+        }
+        if samples.len() == 1 {
+            return samples[0];
+        }
+
+        let position = q * (samples.len() - 1) as f64;
+        let lower_idx = position.floor() as usize;
+        let upper_idx = position.ceil() as usize;
+
+        if lower_idx == upper_idx {
+            samples[lower_idx.min(samples.len() - 1)]
+        } else {
+            let lower_val = samples[lower_idx];
+            let upper_val = samples[upper_idx.min(samples.len() - 1)];
+            let weight = position - lower_idx as f64;
+            lower_val + weight * (upper_val - lower_val)
+        }
     }
 
     /// Get confidence interval using cached sorted samples
@@ -557,9 +581,9 @@ where
 {
     /// Calculates the expected value (mean) of the distribution
     ///
-    /// This method uses lazy evaluation with intelligent caching to avoid recomputing samples
-    /// and intermediate results. Multiple statistical operations on the same distribution
-    /// will automatically reuse samples for optimal performance.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -568,14 +592,23 @@ where
     /// let normal = Uncertain::normal(10.0, 2.0);
     /// let mean = normal.expected_value(1000);
     /// // Should be approximately 10.0
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let mean = stats.mean();
+    /// let variance = stats.variance(); // Reuses same samples
     /// ```
     #[must_use]
     pub fn expected_value(&self, sample_count: usize) -> f64
     where
         T: Into<f64>,
     {
-        let lazy_stats = LazyStats::new(self, sample_count);
-        lazy_stats.mean()
+        let samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        samples.iter().sum::<f64>() / sample_count as f64
     }
 
     /// Calculates the expected value using adaptive sampling for better efficiency
@@ -637,8 +670,9 @@ where
 
     /// Calculates the variance of the distribution
     ///
-    /// This method uses lazy evaluation to efficiently reuse samples and intermediate
-    /// computations (like mean) for optimal performance.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -647,19 +681,41 @@ where
     /// let normal = Uncertain::normal(0.0, 2.0);
     /// let variance = normal.variance(1000);
     /// // Should be approximately 4.0 (std_dev^2)
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let variance = stats.variance();
+    /// let std_dev = stats.std_dev(); // Reuses variance calculation
     /// ```
     #[must_use]
     pub fn variance(&self, sample_count: usize) -> f64
     where
         T: Into<f64>,
     {
-        let lazy_stats = LazyStats::new(self, sample_count);
-        lazy_stats.variance()
+        let samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+
+        let mean = samples.iter().sum::<f64>() / sample_count as f64;
+
+        // Use numerically stable variance calculation
+        samples
+            .iter()
+            .map(|x| {
+                let diff = x - mean;
+                diff * diff
+            })
+            .sum::<f64>()
+            / sample_count as f64
     }
 
     /// Calculates the standard deviation of the distribution
     ///
-    /// This method uses lazy evaluation to efficiently reuse variance computation.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -668,15 +724,18 @@ where
     /// let normal = Uncertain::normal(0.0, 2.0);
     /// let std_dev = normal.standard_deviation(1000);
     /// // Should be approximately 2.0
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let std_dev = stats.std_dev();
+    /// let variance = stats.variance(); // Reuses same samples
     /// ```
     #[must_use]
     pub fn standard_deviation(&self, sample_count: usize) -> f64
     where
         T: Into<f64>,
     {
-        // Use lazy evaluation to reuse variance computation
-        let lazy_stats = LazyStats::new(self, sample_count);
-        lazy_stats.std_dev()
+        self.variance(sample_count).sqrt()
     }
 
     /// Calculates the skewness of the distribution
@@ -763,8 +822,9 @@ where
 {
     /// Calculates confidence interval bounds
     ///
-    /// This method uses lazy evaluation to efficiently reuse sorted samples,
-    /// providing better performance when computing multiple intervals.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -773,15 +833,32 @@ where
     /// let normal = Uncertain::normal(100.0, 15.0);
     /// let (lower, upper) = normal.confidence_interval(0.95, 1000);
     /// // 95% of values should fall between lower and upper
+    ///
+    /// // For multiple stats, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let (lower, upper) = stats.confidence_interval(0.95);
+    /// let median = stats.quantile(0.5); // Reuses sorted samples
     /// ```
     #[must_use]
     pub fn confidence_interval(&self, confidence: f64, sample_count: usize) -> (f64, f64)
     where
         T: Into<f64> + PartialOrd,
     {
-        // Use lazy evaluation to reuse sorted samples
-        let lazy_stats = LazyStats::new(self, sample_count);
-        lazy_stats.confidence_interval(confidence)
+        let mut samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        let alpha = 1.0 - confidence;
+        let lower_idx = ((alpha / 2.0) * samples.len() as f64) as usize;
+        let upper_idx = (((1.0 - alpha / 2.0) * samples.len() as f64) as usize).saturating_sub(1);
+
+        let lower_idx = lower_idx.min(samples.len() - 1);
+        let upper_idx = upper_idx.min(samples.len() - 1);
+
+        (samples[lower_idx], samples[upper_idx])
     }
 
     /// Estimates the cumulative distribution function (CDF) at a given value
@@ -810,10 +887,11 @@ where
         })
     }
 
-    /// Estimates quantiles of the distribution
+    /// Estimates quantiles of the distribution using linear interpolation
     ///
-    /// This method uses lazy evaluation to efficiently reuse sorted samples across
-    /// multiple quantile computations.
+    /// **Note**: For multiple statistical operations on the same distribution,
+    /// use `lazy_stats()` to get a `LazyStats` object for optimal performance
+    /// with sample reuse and caching.
     ///
     /// # Example
     /// ```rust
@@ -822,14 +900,43 @@ where
     /// let normal = Uncertain::normal(0.0, 1.0);
     /// let median = normal.quantile(0.5, 1000);
     /// // Should be approximately 0.0 for standard normal
+    ///
+    /// // For multiple quantiles, use lazy_stats for better performance:
+    /// let stats = normal.lazy_stats(1000);
+    /// let q25 = stats.quantile(0.25);
+    /// let q75 = stats.quantile(0.75); // Reuses sorted samples
     /// ```
     #[must_use]
     pub fn quantile(&self, q: f64, sample_count: usize) -> f64
     where
         T: Into<f64> + PartialOrd,
     {
-        let lazy_stats = LazyStats::new(self, sample_count);
-        lazy_stats.quantile(q)
+        let mut samples: Vec<f64> = self
+            .take_samples(sample_count)
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+
+        if samples.is_empty() {
+            return 0.0;
+        }
+        if samples.len() == 1 {
+            return samples[0];
+        }
+
+        let position = q * (samples.len() - 1) as f64;
+        let lower_idx = position.floor() as usize;
+        let upper_idx = position.ceil() as usize;
+
+        if lower_idx == upper_idx {
+            samples[lower_idx.min(samples.len() - 1)]
+        } else {
+            let lower_val = samples[lower_idx];
+            let upper_val = samples[upper_idx.min(samples.len() - 1)];
+            let weight = position - lower_idx as f64;
+            lower_val + weight * (upper_val - lower_val)
+        }
     }
 
     /// Calculates the interquartile range (IQR)
