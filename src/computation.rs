@@ -653,7 +653,7 @@ impl GraphOptimizer {
                     if_false: Box::new(if_false_opt),
                 }
             }
-            leaf => leaf,
+            ComputationNode::Leaf { .. } => node,
         }
     }
 
@@ -698,7 +698,7 @@ impl GraphOptimizer {
                     if_false: Box::new(if_false_opt),
                 }
             }
-            leaf => leaf,
+            ComputationNode::Leaf { .. } => node,
         }
     }
 }
@@ -1168,10 +1168,8 @@ mod tests {
     fn test_graph_optimizer() {
         let node = ComputationNode::leaf(|| 1.0);
         let mut optimizer = GraphOptimizer::new();
-        let optimized = optimizer.optimize(node);
-
-        // Currently optimization is a no-op, but this tests the interface
-        assert_eq!(optimized.node_count(), 1);
+        let optimized_node = optimizer.optimize(node);
+        assert_eq!(optimized_node.node_count(), 1);
     }
 
     #[test]

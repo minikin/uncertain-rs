@@ -39,13 +39,12 @@ where
         F: FnOnce() -> V,
     {
         let mut cache_ref = cache.borrow_mut();
-        match cache_ref.as_ref() {
-            Some(value) => value.clone(),
-            None => {
-                let computed = compute();
-                *cache_ref = Some(computed.clone());
-                computed
-            }
+        if let Some(value) = cache_ref.as_ref() {
+            value.clone()
+        } else {
+            let computed = compute();
+            *cache_ref = Some(computed.clone());
+            computed
         }
     }
     /// Create a new lazy statistics wrapper
@@ -307,10 +306,10 @@ where
             let mean = stats.mean();
 
             if sample_count > self.config.min_samples {
-                let relative_error = if mean != 0.0 {
-                    ((mean - prev_mean) / mean).abs()
-                } else {
+                let relative_error = if mean == 0.0 {
                     (mean - prev_mean).abs()
+                } else {
+                    ((mean - prev_mean) / mean).abs()
                 };
 
                 if relative_error < self.config.error_threshold
@@ -344,10 +343,10 @@ where
             let variance = stats.variance();
 
             if sample_count > self.config.min_samples {
-                let relative_error = if variance != 0.0 {
-                    ((variance - prev_variance) / variance).abs()
-                } else {
+                let relative_error = if variance == 0.0 {
                     (variance - prev_variance).abs()
+                } else {
+                    ((variance - prev_variance) / variance).abs()
                 };
 
                 if relative_error < self.config.error_threshold
@@ -530,7 +529,7 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(5.0, 1.0);
-    /// let mut progressive = normal.progressive_stats();
+    /// let mut progressive = Uncertain::<f64>::progressive_stats();
     ///
     /// // Add samples incrementally
     /// for _ in 0..1000 {
@@ -541,7 +540,7 @@ where
     /// let variance = progressive.variance();
     /// ```
     #[must_use]
-    pub fn progressive_stats(&self) -> ProgressiveStats {
+    pub fn progressive_stats() -> ProgressiveStats {
         ProgressiveStats::new()
     }
 

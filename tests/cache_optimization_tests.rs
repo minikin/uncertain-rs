@@ -220,10 +220,10 @@ fn test_graph_optimizer_subexpression_elimination() {
         uncertain_rs::operations::arithmetic::BinaryOperation::Add,
     );
 
-    let optimized = optimizer.optimize(node);
+    let optimized_node = optimizer.optimize(node);
 
-    let result = optimized.evaluate_fresh();
-    assert_eq!(result, 3.0);
+    let result = optimized_node.evaluate_fresh();
+    assert!((result - 3.0_f64).abs() < f64::EPSILON);
 }
 
 #[test]
