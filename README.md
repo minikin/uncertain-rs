@@ -12,10 +12,6 @@ A Rust library for uncertainty-aware programming, implementing the approach from
   - [Features](#features)
   - [Installation](#installation)
   - [Quick Start](#quick-start)
-  - [TODO's](#todos)
-    - [High Priority:](#high-priority)
-    - [Medium Priority:](#medium-priority)
-    - [Lower Priority:](#lower-priority)
   - [Development Workflow](#development-workflow)
     - [Security](#security)
   - [Contributing](#contributing)
@@ -85,26 +81,6 @@ fn main() {
 ```
 
 For more examples, see the [examples directory](examples).
-
-## TODO's
-
-### High Priority:
-
-- Add more practical examples: Financial risk, quality control, A/B testing
-- Performance optimizations: Memoization and caching for complex
-  computations
-
-### Medium Priority:
-
-- Additional distributions: Weibull, Pareto, Chi-squared, t-distribution
-- Correlation support
-- For dependent uncertain variables
-- Builder pattern: for complex distribution configuration
-
-### Lower Priority:
-
-- Visualization support: Histogram generation and CSV export
-- Better documentation: More cross-references to the original paper
 
 ## Development Workflow
 
