@@ -1573,7 +1573,6 @@ mod tests {
         let normal = Uncertain::normal(1.0, 1.0);
         let lazy_stats = normal.lazy_stats(100);
 
-        // Test Debug trait
         let debug_str = format!("{lazy_stats:?}");
         assert!(debug_str.contains("LazyStats"));
 
