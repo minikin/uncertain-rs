@@ -12,6 +12,8 @@ A Rust library for uncertainty-aware programming, implementing the approach from
   - [Features](#features)
   - [Installation](#installation)
   - [Quick Start](#quick-start)
+  - [Advanced Features](#advanced-features)
+    - [Graph Optimization](#graph-optimization)
   - [Development Workflow](#development-workflow)
     - [Security](#security)
   - [Contributing](#contributing)
@@ -43,6 +45,7 @@ if speeding_evidence.probability_exceeds(0.95) {
 - **Evidence-based conditionals**: Comparisons return evidence, not boolean facts
 - **Uncertainty propagation**: Arithmetic operations preserve uncertainty
 - **Lazy evaluation**: Computation graphs built lazily for efficiency
+- **Graph optimization**: Common subexpression elimination and caching for performance
 - **SPRT hypothesis testing**: Sequential Probability Ratio Test for optimal sampling
 - **Rich distributions**: Normal, uniform, exponential, binomial, categorical, etc.
 - **Statistical analysis**: Mean, std dev, confidence intervals, CDF, etc.
@@ -81,6 +84,33 @@ fn main() {
 ```
 
 For more examples, see the [examples directory](examples).
+
+## Advanced Features
+
+### Graph Optimization
+
+The library includes a computation graph optimizer that can eliminate common subexpressions and improve performance:
+
+```rust
+use uncertain_rs::{Uncertain, computation::GraphOptimizer};
+
+// Create an expression with common subexpressions
+let x = Uncertain::normal(2.0, 0.1);
+let y = Uncertain::normal(3.0, 0.1);
+let z = Uncertain::normal(1.0, 0.1);
+
+// Expression: (x + y) * (x + y) + (x + y) * z
+// The subexpression (x + y) appears 3 times
+let sum = x.clone() + y.clone();
+let expr = (sum.clone() * sum.clone()) + (sum * z);
+
+// Apply optimization to eliminate common subexpressions
+let mut optimizer = GraphOptimizer::new();
+let optimized = optimizer.eliminate_common_subexpressions(expr.into_computation_node());
+
+// The optimized graph reuses the (x + y) subexpression
+println!("Cache size: {}", optimizer.subexpression_cache.len());
+```
 
 ## Development Workflow
 
