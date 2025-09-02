@@ -562,10 +562,10 @@ impl GraphOptimizer {
         let hash = node.structural_hash();
 
         // Check if we have a cached version of this subexpression
-        if let Some(cached_node) = self.subexpression_cache.get(&hash) {
-            if let Some(cached) = cached_node.downcast_ref::<ComputationNode<T>>() {
-                return cached.clone();
-            }
+        if let Some(cached_node) = self.subexpression_cache.get(&hash)
+            && let Some(cached) = cached_node.downcast_ref::<ComputationNode<T>>()
+        {
+            return cached.clone();
         }
 
         // Recursively optimize children and cache this node
