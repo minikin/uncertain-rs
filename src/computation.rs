@@ -528,7 +528,7 @@ where
 /// Computation graph optimizer for improving evaluation performance
 pub struct GraphOptimizer {
     /// Cache of optimized subexpressions
-    subexpression_cache: HashMap<u64, uuid::Uuid>,
+    pub subexpression_cache: HashMap<u64, Box<dyn std::any::Any + Send + Sync>>,
 }
 
 impl GraphOptimizer {
@@ -552,15 +552,20 @@ impl GraphOptimizer {
     }
 
     /// Eliminates common subexpressions by reusing nodes with same structure
-    fn eliminate_common_subexpressions<T>(&mut self, node: ComputationNode<T>) -> ComputationNode<T>
+    pub fn eliminate_common_subexpressions<T>(
+        &mut self,
+        node: ComputationNode<T>,
+    ) -> ComputationNode<T>
     where
         T: Shareable,
     {
         let hash = node.structural_hash();
 
-        if let Some(_existing_id) = self.subexpression_cache.get(&hash) {
-            // TODO: We need return the cached node, for now, just return the original
-            return node;
+        // Check if we have a cached version of this subexpression
+        if let Some(cached_node) = self.subexpression_cache.get(&hash)
+            && let Some(cached) = cached_node.downcast_ref::<ComputationNode<T>>()
+        {
+            return cached.clone();
         }
 
         // Recursively optimize children and cache this node
@@ -603,9 +608,8 @@ impl GraphOptimizer {
         };
 
         // Cache this subexpression for future use
-        if let ComputationNode::Leaf { id, .. } = &optimized {
-            self.subexpression_cache.insert(hash, *id);
-        }
+        self.subexpression_cache
+            .insert(hash, Box::new(optimized.clone()));
 
         optimized
     }
@@ -1170,6 +1174,63 @@ mod tests {
         let mut optimizer = GraphOptimizer::new();
         let optimized_node = optimizer.optimize(node);
         assert_eq!(optimized_node.node_count(), 1);
+    }
+
+    #[test]
+    fn test_common_subexpression_elimination() {
+        let mut optimizer = GraphOptimizer::new();
+
+        // Create a common subexpression: (x + y) * (x + y)
+        let x = ComputationNode::leaf(|| 2.0);
+        let y = ComputationNode::leaf(|| 3.0);
+        let sum = ComputationNode::binary_op(x.clone(), y.clone(), BinaryOperation::Add);
+
+        // Create the expression: (x + y) * (x + y)
+        let expr = ComputationNode::binary_op(sum.clone(), sum, BinaryOperation::Mul);
+
+        // First optimization should cache the sum subexpression
+        let optimized1 = optimizer.eliminate_common_subexpressions(expr.clone());
+
+        // Second optimization should reuse the cached sum subexpression
+        let optimized2 = optimizer.eliminate_common_subexpressions(expr);
+
+        // Both should produce the same result
+        let result1: f64 = optimized1.evaluate_fresh();
+        let result2: f64 = optimized2.evaluate_fresh();
+        assert!((result1 - result2).abs() < f64::EPSILON);
+
+        // The cache should contain the sum subexpression
+        assert!(!optimizer.subexpression_cache.is_empty());
+    }
+
+    #[test]
+    #[allow(clippy::similar_names)]
+    fn test_common_subexpression_elimination_complex() {
+        let mut optimizer = GraphOptimizer::new();
+
+        // Create a more complex expression with multiple common subexpressions
+        let a = ComputationNode::leaf(|| 1.0);
+        let b = ComputationNode::leaf(|| 2.0);
+        let c = ComputationNode::leaf(|| 3.0);
+
+        // Common subexpression: a + b
+        let sum_ab = ComputationNode::binary_op(a.clone(), b.clone(), BinaryOperation::Add);
+
+        // Expression: (a + b) * (a + b) + (a + b) * c
+        let expr1 =
+            ComputationNode::binary_op(sum_ab.clone(), sum_ab.clone(), BinaryOperation::Mul);
+        let expr2 = ComputationNode::binary_op(sum_ab.clone(), c.clone(), BinaryOperation::Mul);
+        let final_expr = ComputationNode::binary_op(expr1, expr2, BinaryOperation::Add);
+
+        let optimized = optimizer.eliminate_common_subexpressions(final_expr);
+
+        // Should produce correct result
+        let result: f64 = optimized.evaluate_fresh();
+        let expected = (1.0 + 2.0) * (1.0 + 2.0) + (1.0 + 2.0) * 3.0;
+        assert!((result - expected).abs() < f64::EPSILON);
+
+        // Cache should contain the common subexpression
+        assert!(!optimizer.subexpression_cache.is_empty());
     }
 
     #[test]
