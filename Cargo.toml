@@ -21,3 +21,11 @@ criterion = { version = "0.7", features = ["html_reports"] }
 [[bench]]
 name = "performance_benchmarks"
 harness = false
+
+[[example]]
+name = "graph_optimization"
+path = "examples/optimizations/graph_optimization.rs"
+
+[[example]]
+name = "common_subexpression_optimization"
+path = "examples/optimizations/common_subexpression_optimization.rs"
