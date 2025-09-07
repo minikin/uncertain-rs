@@ -13,19 +13,74 @@ pub trait Arithmetic:
     + Sync
     + 'static
 {
+    /// Returns the additive identity (zero)
+    fn zero() -> Self;
+
+    /// Returns the multiplicative identity (one)
+    fn one() -> Self;
 }
 
-/// Blanket implementation for any type that satisfies the arithmetic requirements
-impl<T> Arithmetic for T where
-    T: Add<Output = T>
-        + Sub<Output = T>
-        + Mul<Output = T>
-        + Div<Output = T>
-        + Clone
-        + Send
-        + Sync
-        + 'static
-{
+// No blanket implementation to avoid conflicts with specific implementations
+
+// Implement Arithmetic for common numeric types
+impl Arithmetic for f64 {
+    fn zero() -> Self {
+        0.0
+    }
+
+    fn one() -> Self {
+        1.0
+    }
+}
+
+impl Arithmetic for f32 {
+    fn zero() -> Self {
+        0.0
+    }
+
+    fn one() -> Self {
+        1.0
+    }
+}
+
+impl Arithmetic for i32 {
+    fn zero() -> Self {
+        0
+    }
+
+    fn one() -> Self {
+        1
+    }
+}
+
+impl Arithmetic for i64 {
+    fn zero() -> Self {
+        0
+    }
+
+    fn one() -> Self {
+        1
+    }
+}
+
+impl Arithmetic for u32 {
+    fn zero() -> Self {
+        0
+    }
+
+    fn one() -> Self {
+        1
+    }
+}
+
+impl Arithmetic for u64 {
+    fn zero() -> Self {
+        0
+    }
+
+    fn one() -> Self {
+        1
+    }
 }
 
 /// Binary operation types for computation graph

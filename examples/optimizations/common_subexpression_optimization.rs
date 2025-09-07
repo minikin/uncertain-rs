@@ -1,5 +1,6 @@
 use uncertain_rs::{
-    Uncertain, computation::GraphOptimizer, operations::arithmetic::BinaryOperation,
+    Uncertain, computation::ComputationNode, computation::GraphOptimizer,
+    operations::arithmetic::BinaryOperation,
 };
 
 fn main() {
@@ -23,33 +24,20 @@ fn main() {
     let result_without_opt = expr.expected_value(1000);
     println!("Result without optimization: {result_without_opt:.2}");
 
-    // Now let's demonstrate the optimization
     println!("\n🔄 Applying Common Subexpression Elimination...");
 
     let mut optimizer = GraphOptimizer::new();
 
     // Create the same expression structure for optimization
-    let x_node = uncertain_rs::computation::ComputationNode::leaf(|| 2.0);
-    let y_node = uncertain_rs::computation::ComputationNode::leaf(|| 3.0);
-    let z_node = uncertain_rs::computation::ComputationNode::leaf(|| 1.0);
+    let x_node = ComputationNode::leaf(|| 2.0);
+    let y_node = ComputationNode::leaf(|| 3.0);
+    let z_node = ComputationNode::leaf(|| 1.0);
 
-    let sum_node = uncertain_rs::computation::ComputationNode::binary_op(
-        x_node.clone(),
-        y_node.clone(),
-        BinaryOperation::Add,
-    );
+    let sum_node = ComputationNode::binary_op(x_node.clone(), y_node.clone(), BinaryOperation::Add);
 
-    let expr_node = uncertain_rs::computation::ComputationNode::binary_op(
-        uncertain_rs::computation::ComputationNode::binary_op(
-            sum_node.clone(),
-            sum_node.clone(),
-            BinaryOperation::Mul,
-        ),
-        uncertain_rs::computation::ComputationNode::binary_op(
-            sum_node.clone(),
-            z_node,
-            BinaryOperation::Mul,
-        ),
+    let expr_node = ComputationNode::binary_op(
+        ComputationNode::binary_op(sum_node.clone(), sum_node.clone(), BinaryOperation::Mul),
+        ComputationNode::binary_op(sum_node.clone(), z_node, BinaryOperation::Mul),
         BinaryOperation::Add,
     );
 
@@ -62,7 +50,6 @@ fn main() {
     );
     println!("Optimized node count: {}", optimized_node.node_count());
 
-    // Evaluate optimized expression
     let result_with_opt = optimized_node.evaluate_fresh();
     println!("Result with optimization: {result_with_opt:.2}");
 
