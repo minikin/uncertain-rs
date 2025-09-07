@@ -12,7 +12,7 @@ categories = ["science", "algorithms", "mathematics"]
 
 [dependencies]
 rand = "0.9.2"
-uuid = { version = "1.0", features = ["v4"] }
+uuid = { version = "1.18.1", features = ["v4"] }
 
 [dev-dependencies]
 approx = "0.5"
