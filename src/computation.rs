@@ -625,149 +625,247 @@ impl GraphOptimizer {
                 left,
                 right,
                 operation,
-            } => {
-                let left_opt = Self::eliminate_identity_operations(*left);
-                let right_opt = Self::eliminate_identity_operations(*right);
-
-                // Check for identity operations
-                #[allow(unreachable_patterns, unused_variables)]
-                match (&left_opt, &right_opt, &operation) {
-                    // x + 0 = x
-                    (
-                        left,
-                        ComputationNode::Leaf {
-                            sample: right_sample,
-                            ..
-                        },
-                        BinaryOperation::Add,
-                    ) => {
-                        if Self::is_constant_zero(right_sample) {
-                            return left_opt;
-                        }
-                    }
-                    // 0 + x = x
-                    (
-                        ComputationNode::Leaf {
-                            sample: left_sample,
-                            ..
-                        },
-                        right,
-                        BinaryOperation::Add,
-                    ) => {
-                        if Self::is_constant_zero(left_sample) {
-                            return right_opt;
-                        }
-                    }
-                    // x - 0 = x
-                    (
-                        left,
-                        ComputationNode::Leaf {
-                            sample: right_sample,
-                            ..
-                        },
-                        BinaryOperation::Sub,
-                    ) => {
-                        if Self::is_constant_zero(right_sample) {
-                            return left_opt;
-                        }
-                    }
-                    // x * 0 = 0
-                    (
-                        left,
-                        ComputationNode::Leaf {
-                            sample: right_sample,
-                            ..
-                        },
-                        BinaryOperation::Mul,
-                    ) => {
-                        if Self::is_constant_zero(right_sample) {
-                            return ComputationNode::leaf(|| T::zero());
-                        }
-                    }
-                    // 0 * x = 0
-                    (
-                        ComputationNode::Leaf {
-                            sample: left_sample,
-                            ..
-                        },
-                        right,
-                        BinaryOperation::Mul,
-                    ) => {
-                        if Self::is_constant_zero(left_sample) {
-                            return ComputationNode::leaf(|| T::zero());
-                        }
-                    }
-                    // x * 1 = x
-                    (
-                        left,
-                        ComputationNode::Leaf {
-                            sample: right_sample,
-                            ..
-                        },
-                        BinaryOperation::Mul,
-                    ) => {
-                        if Self::is_constant_one(right_sample) {
-                            return left_opt;
-                        }
-                    }
-                    // 1 * x = x
-                    (
-                        ComputationNode::Leaf {
-                            sample: left_sample,
-                            ..
-                        },
-                        right,
-                        BinaryOperation::Mul,
-                    ) => {
-                        if Self::is_constant_one(left_sample) {
-                            return right_opt;
-                        }
-                    }
-                    // x / 1 = x
-                    (
-                        left,
-                        ComputationNode::Leaf {
-                            sample: right_sample,
-                            ..
-                        },
-                        BinaryOperation::Div,
-                    ) => {
-                        if Self::is_constant_one(right_sample) {
-                            return left_opt;
-                        }
-                    }
-                    _ => {}
-                }
-
-                ComputationNode::BinaryOp {
-                    left: Box::new(left_opt),
-                    right: Box::new(right_opt),
-                    operation,
-                }
-            }
+            } => Self::eliminate_identity_operations_binary(*left, *right, operation),
             ComputationNode::UnaryOp { operand, operation } => {
-                let operand_opt = Self::eliminate_identity_operations(*operand);
-                ComputationNode::UnaryOp {
-                    operand: Box::new(operand_opt),
-                    operation,
-                }
+                Self::eliminate_identity_operations_unary(*operand, operation)
             }
             ComputationNode::Conditional {
                 condition,
                 if_true,
                 if_false,
-            } => {
-                // For conditionals, we need to handle the boolean condition separately
-                let condition_opt = Self::eliminate_identity_operations_bool(*condition);
-                let if_true_opt = Self::eliminate_identity_operations(*if_true);
-                let if_false_opt = Self::eliminate_identity_operations(*if_false);
-                ComputationNode::Conditional {
-                    condition: Box::new(condition_opt),
-                    if_true: Box::new(if_true_opt),
-                    if_false: Box::new(if_false_opt),
+            } => Self::eliminate_identity_operations_conditional(*condition, *if_true, *if_false),
+            ComputationNode::Leaf { .. } => node,
+        }
+    }
+
+    /// Handles identity operation elimination for binary operations
+    fn eliminate_identity_operations_binary<T>(
+        left: ComputationNode<T>,
+        right: ComputationNode<T>,
+        operation: BinaryOperation,
+    ) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        let left_opt = Self::eliminate_identity_operations(left);
+        let right_opt = Self::eliminate_identity_operations(right);
+
+        // Check for identity operations by operation type
+        match operation {
+            BinaryOperation::Add => {
+                if let Some(result) = Self::check_addition_identities(&left_opt, &right_opt) {
+                    return result;
                 }
             }
-            ComputationNode::Leaf { .. } => node,
+            BinaryOperation::Sub => {
+                if let Some(result) = Self::check_subtraction_identities(&left_opt, &right_opt) {
+                    return result;
+                }
+            }
+            BinaryOperation::Mul => {
+                if let Some(result) = Self::check_multiplication_identities(&left_opt, &right_opt) {
+                    return result;
+                }
+            }
+            BinaryOperation::Div => {
+                if let Some(result) = Self::check_division_identities(&left_opt, &right_opt) {
+                    return result;
+                }
+            }
+        }
+
+        ComputationNode::BinaryOp {
+            left: Box::new(left_opt),
+            right: Box::new(right_opt),
+            operation,
+        }
+    }
+
+    /// Checks for addition identity operations: x + 0 = x, 0 + x = x
+    fn check_addition_identities<T>(
+        left: &ComputationNode<T>,
+        right: &ComputationNode<T>,
+    ) -> Option<ComputationNode<T>>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        match (left, right) {
+            // x + 0 = x
+            (
+                left,
+                ComputationNode::Leaf {
+                    sample: right_sample,
+                    ..
+                },
+            ) => {
+                if Self::is_constant_zero(right_sample) {
+                    return Some(left.clone());
+                }
+            }
+            // 0 + x = x
+            (
+                ComputationNode::Leaf {
+                    sample: left_sample,
+                    ..
+                },
+                right,
+            ) => {
+                if Self::is_constant_zero(left_sample) {
+                    return Some(right.clone());
+                }
+            }
+            _ => {}
+        }
+        None
+    }
+
+    /// Checks for subtraction identity operations: x - 0 = x
+    fn check_subtraction_identities<T>(
+        left: &ComputationNode<T>,
+        right: &ComputationNode<T>,
+    ) -> Option<ComputationNode<T>>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        // x - 0 = x
+        if let (
+            left,
+            ComputationNode::Leaf {
+                sample: right_sample,
+                ..
+            },
+        ) = (left, right)
+            && Self::is_constant_zero(right_sample)
+        {
+            return Some(left.clone());
+        }
+        None
+    }
+
+    /// Checks for multiplication identity operations: x * 0 = 0, 0 * x = 0, x * 1 = x, 1 * x = x
+    fn check_multiplication_identities<T>(
+        left: &ComputationNode<T>,
+        right: &ComputationNode<T>,
+    ) -> Option<ComputationNode<T>>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        // Check for zero multiplication first (x * 0 = 0, 0 * x = 0)
+        match (left, right) {
+            // x * 0 = 0
+            (
+                _left,
+                ComputationNode::Leaf {
+                    sample: right_sample,
+                    ..
+                },
+            ) => {
+                if Self::is_constant_zero(right_sample) {
+                    return Some(ComputationNode::leaf(|| T::zero()));
+                }
+            }
+            // 0 * x = 0
+            (
+                ComputationNode::Leaf {
+                    sample: left_sample,
+                    ..
+                },
+                _right,
+            ) => {
+                if Self::is_constant_zero(left_sample) {
+                    return Some(ComputationNode::leaf(|| T::zero()));
+                }
+            }
+            _ => {}
+        }
+
+        // Check for identity multiplication (x * 1 = x, 1 * x = x)
+        match (left, right) {
+            // x * 1 = x
+            (
+                left,
+                ComputationNode::Leaf {
+                    sample: right_sample,
+                    ..
+                },
+            ) => {
+                if Self::is_constant_one(right_sample) {
+                    return Some(left.clone());
+                }
+            }
+            // 1 * x = x
+            (
+                ComputationNode::Leaf {
+                    sample: left_sample,
+                    ..
+                },
+                right,
+            ) => {
+                if Self::is_constant_one(left_sample) {
+                    return Some(right.clone());
+                }
+            }
+            _ => {}
+        }
+
+        None
+    }
+
+    /// Checks for division identity operations: x / 1 = x
+    fn check_division_identities<T>(
+        left: &ComputationNode<T>,
+        right: &ComputationNode<T>,
+    ) -> Option<ComputationNode<T>>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        // x / 1 = x
+        if let (
+            left,
+            ComputationNode::Leaf {
+                sample: right_sample,
+                ..
+            },
+        ) = (left, right)
+            && Self::is_constant_one(right_sample)
+        {
+            return Some(left.clone());
+        }
+        None
+    }
+
+    /// Handles identity operation elimination for unary operations
+    fn eliminate_identity_operations_unary<T>(
+        operand: ComputationNode<T>,
+        operation: UnaryOperation<T>,
+    ) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        let operand_opt = Self::eliminate_identity_operations(operand);
+        ComputationNode::UnaryOp {
+            operand: Box::new(operand_opt),
+            operation,
+        }
+    }
+
+    /// Handles identity operation elimination for conditional operations
+    fn eliminate_identity_operations_conditional<T>(
+        condition: ComputationNode<bool>,
+        if_true: ComputationNode<T>,
+        if_false: ComputationNode<T>,
+    ) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic + PartialEq + Clone,
+    {
+        // For conditionals, we need to handle the boolean condition separately
+        let condition_opt = Self::eliminate_identity_operations_bool(condition);
+        let if_true_opt = Self::eliminate_identity_operations(if_true);
+        let if_false_opt = Self::eliminate_identity_operations(if_false);
+        ComputationNode::Conditional {
+            condition: Box::new(condition_opt),
+            if_true: Box::new(if_true_opt),
+            if_false: Box::new(if_false_opt),
         }
     }
 
@@ -837,97 +935,123 @@ impl GraphOptimizer {
                 left,
                 right,
                 operation,
-            } => {
-                let left_opt = Self::constant_folding(*left);
-                let right_opt = Self::constant_folding(*right);
-
-                // Check if both operands are constants
-                if let (
-                    ComputationNode::Leaf {
-                        sample: left_sample,
-                        ..
-                    },
-                    ComputationNode::Leaf {
-                        sample: right_sample,
-                        ..
-                    },
-                ) = (&left_opt, &right_opt)
-                {
-                    if Self::is_constant(left_sample) && Self::is_constant(right_sample) {
-                        // Both are constants, evaluate at compile time
-                        let left_val = left_sample();
-                        let right_val = right_sample();
-                        let result = match operation {
-                            BinaryOperation::Add => left_val + right_val,
-                            BinaryOperation::Sub => left_val - right_val,
-                            BinaryOperation::Mul => left_val * right_val,
-                            BinaryOperation::Div => left_val / right_val,
-                        };
-                        return ComputationNode::leaf(move || result.clone());
-                    }
-                }
-
-                ComputationNode::BinaryOp {
-                    left: Box::new(left_opt),
-                    right: Box::new(right_opt),
-                    operation,
-                }
-            }
+            } => Self::constant_folding_binary_op(*left, *right, operation),
             ComputationNode::UnaryOp { operand, operation } => {
-                let operand_opt = Self::constant_folding(*operand);
-
-                // Check if operand is constant
-                if let ComputationNode::Leaf {
-                    sample: operand_sample,
-                    ..
-                } = &operand_opt
-                {
-                    if Self::is_constant(operand_sample) {
-                        let operand_val = operand_sample();
-                        let result = match operation {
-                            UnaryOperation::Map(func) => func(operand_val),
-                            UnaryOperation::Filter(_) => operand_val, // Filter doesn't change the value
-                        };
-                        return ComputationNode::leaf(move || result.clone());
-                    }
-                }
-
-                ComputationNode::UnaryOp {
-                    operand: Box::new(operand_opt),
-                    operation,
-                }
+                Self::constant_folding_unary_op(*operand, operation)
             }
             ComputationNode::Conditional {
                 condition,
                 if_true,
                 if_false,
-            } => {
-                let condition_opt = Self::constant_folding_bool(*condition);
-                let if_true_opt = Self::constant_folding(*if_true);
-                let if_false_opt = Self::constant_folding(*if_false);
-
-                // Check if condition is constant
-                if let ComputationNode::Leaf {
-                    sample: condition_sample,
-                    ..
-                } = &condition_opt
-                {
-                    if Self::is_constant_bool(condition_sample) {
-                        let condition_val = condition_sample();
-                        if condition_val {
-                            return if_true_opt;
-                        }
-                        return if_false_opt;
-                    }
-                }
-
-                ComputationNode::Conditional {
-                    condition: Box::new(condition_opt),
-                    if_true: Box::new(if_true_opt),
-                    if_false: Box::new(if_false_opt),
-                }
-            }
+            } => Self::constant_folding_conditional(*condition, *if_true, *if_false),
             ComputationNode::Leaf { .. } => node,
+        }
+    }
+
+    /// Handles constant folding for binary operations
+    fn constant_folding_binary_op<T>(
+        left: ComputationNode<T>,
+        right: ComputationNode<T>,
+        operation: BinaryOperation,
+    ) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic + Clone + PartialEq,
+    {
+        let left_opt = Self::constant_folding(left);
+        let right_opt = Self::constant_folding(right);
+
+        if let (
+            ComputationNode::Leaf {
+                sample: left_sample,
+                ..
+            },
+            ComputationNode::Leaf {
+                sample: right_sample,
+                ..
+            },
+        ) = (&left_opt, &right_opt)
+            && Self::is_constant(left_sample)
+            && Self::is_constant(right_sample)
+        {
+            let left_val = left_sample();
+            let right_val = right_sample();
+            let result = match operation {
+                BinaryOperation::Add => left_val + right_val,
+                BinaryOperation::Sub => left_val - right_val,
+                BinaryOperation::Mul => left_val * right_val,
+                BinaryOperation::Div => left_val / right_val,
+            };
+            return ComputationNode::leaf(move || result.clone());
+        }
+
+        ComputationNode::BinaryOp {
+            left: Box::new(left_opt),
+            right: Box::new(right_opt),
+            operation,
+        }
+    }
+
+    /// Handles constant folding for unary operations
+    fn constant_folding_unary_op<T>(
+        operand: ComputationNode<T>,
+        operation: UnaryOperation<T>,
+    ) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic + Clone + PartialEq,
+    {
+        let operand_opt = Self::constant_folding(operand);
+
+        if let ComputationNode::Leaf {
+            sample: operand_sample,
+            ..
+        } = &operand_opt
+            && Self::is_constant(operand_sample)
+        {
+            let operand_val = operand_sample();
+            let result = match operation {
+                UnaryOperation::Map(func) => func(operand_val),
+                UnaryOperation::Filter(_) => operand_val, // Filter doesn't change the value
+            };
+            return ComputationNode::leaf(move || result.clone());
+        }
+
+        ComputationNode::UnaryOp {
+            operand: Box::new(operand_opt),
+            operation,
+        }
+    }
+
+    /// Handles constant folding for conditional operations
+    fn constant_folding_conditional<T>(
+        condition: ComputationNode<bool>,
+        if_true: ComputationNode<T>,
+        if_false: ComputationNode<T>,
+    ) -> ComputationNode<T>
+    where
+        T: Shareable + Arithmetic + Clone + PartialEq,
+    {
+        let condition_opt = Self::constant_folding_bool(condition);
+        let if_true_opt = Self::constant_folding(if_true);
+        let if_false_opt = Self::constant_folding(if_false);
+
+        // Check if condition is constant
+        if let ComputationNode::Leaf {
+            sample: condition_sample,
+            ..
+        } = &condition_opt
+            && Self::is_constant_bool(condition_sample)
+        {
+            let condition_val = condition_sample();
+            if condition_val {
+                return if_true_opt;
+            }
+            return if_false_opt;
+        }
+
+        ComputationNode::Conditional {
+            condition: Box::new(condition_opt),
+            if_true: Box::new(if_true_opt),
+            if_false: Box::new(if_false_opt),
         }
     }
 
@@ -935,60 +1059,71 @@ impl GraphOptimizer {
     fn constant_folding_bool(node: ComputationNode<bool>) -> ComputationNode<bool> {
         match node {
             ComputationNode::UnaryOp { operand, operation } => {
-                let operand_opt = Self::constant_folding_bool(*operand);
-
-                // Check if operand is constant
-                if let ComputationNode::Leaf {
-                    sample: operand_sample,
-                    ..
-                } = &operand_opt
-                {
-                    if Self::is_constant_bool(operand_sample) {
-                        let operand_val = operand_sample();
-                        let result = match operation {
-                            UnaryOperation::Map(func) => func(operand_val),
-                            UnaryOperation::Filter(_) => operand_val, // Filter doesn't change the value
-                        };
-                        return ComputationNode::leaf(move || result);
-                    }
-                }
-
-                ComputationNode::UnaryOp {
-                    operand: Box::new(operand_opt),
-                    operation,
-                }
+                Self::constant_folding_bool_unary_op(*operand, operation)
             }
             ComputationNode::Conditional {
                 condition,
                 if_true,
                 if_false,
-            } => {
-                let condition_opt = Self::constant_folding_bool(*condition);
-                let if_true_opt = Self::constant_folding_bool(*if_true);
-                let if_false_opt = Self::constant_folding_bool(*if_false);
-
-                // Check if condition is constant
-                if let ComputationNode::Leaf {
-                    sample: condition_sample,
-                    ..
-                } = &condition_opt
-                {
-                    if Self::is_constant_bool(condition_sample) {
-                        let condition_val = condition_sample();
-                        if condition_val {
-                            return if_true_opt;
-                        }
-                        return if_false_opt;
-                    }
-                }
-
-                ComputationNode::Conditional {
-                    condition: Box::new(condition_opt),
-                    if_true: Box::new(if_true_opt),
-                    if_false: Box::new(if_false_opt),
-                }
-            }
+            } => Self::constant_folding_bool_conditional(*condition, *if_true, *if_false),
             ComputationNode::Leaf { .. } | ComputationNode::BinaryOp { .. } => node,
+        }
+    }
+
+    /// Handles constant folding for boolean unary operations
+    fn constant_folding_bool_unary_op(
+        operand: ComputationNode<bool>,
+        operation: UnaryOperation<bool>,
+    ) -> ComputationNode<bool> {
+        let operand_opt = Self::constant_folding_bool(operand);
+
+        if let ComputationNode::Leaf {
+            sample: operand_sample,
+            ..
+        } = &operand_opt
+            && Self::is_constant_bool(operand_sample)
+        {
+            let operand_val = operand_sample();
+            let result = match operation {
+                UnaryOperation::Map(func) => func(operand_val),
+                UnaryOperation::Filter(_) => operand_val, // Filter doesn't change the value
+            };
+            return ComputationNode::leaf(move || result);
+        }
+
+        ComputationNode::UnaryOp {
+            operand: Box::new(operand_opt),
+            operation,
+        }
+    }
+
+    /// Handles constant folding for boolean conditional operations
+    fn constant_folding_bool_conditional(
+        condition: ComputationNode<bool>,
+        if_true: ComputationNode<bool>,
+        if_false: ComputationNode<bool>,
+    ) -> ComputationNode<bool> {
+        let condition_opt = Self::constant_folding_bool(condition);
+        let if_true_opt = Self::constant_folding_bool(if_true);
+        let if_false_opt = Self::constant_folding_bool(if_false);
+
+        if let ComputationNode::Leaf {
+            sample: condition_sample,
+            ..
+        } = &condition_opt
+            && Self::is_constant_bool(condition_sample)
+        {
+            let condition_val = condition_sample();
+            if condition_val {
+                return if_true_opt;
+            }
+            return if_false_opt;
+        }
+
+        ComputationNode::Conditional {
+            condition: Box::new(condition_opt),
+            if_true: Box::new(if_true_opt),
+            if_false: Box::new(if_false_opt),
         }
     }
 
