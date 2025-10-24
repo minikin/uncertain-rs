@@ -101,9 +101,6 @@ match result {
     Ok(dist) => { /* use dist */ }
 }
 ```
-
-See the [error_handling example](examples/error_handling.rs) for more details.
-
 ## Advanced Features
 
 ### Graph Optimization
