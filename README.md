@@ -85,6 +85,25 @@ fn main() {
 
 For more examples, see the [examples directory](examples).
 
+## Error Handling
+
+The library uses a custom `UncertainError` type for type-safe error handling:
+
+```rust
+use uncertain_rs::{Uncertain, UncertainError};
+
+let result = Uncertain::<f64>::mixture(vec![], None);
+match result {
+    Err(UncertainError::EmptyComponents) => {
+        println!("Error: No components provided");
+    }
+    Err(e) => println!("Error: {}", e),
+    Ok(dist) => { /* use dist */ }
+}
+```
+
+See the [error_handling example](examples/error_handling.rs) for more details.
+
 ## Advanced Features
 
 ### Graph Optimization

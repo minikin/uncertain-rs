@@ -36,12 +36,14 @@
 pub mod cache;
 pub mod computation;
 pub mod distributions;
+pub mod error;
 pub mod hypothesis;
 pub mod operations;
 pub mod statistics;
 pub mod traits;
 pub mod uncertain;
 
+pub use error::{Result, UncertainError};
 pub use hypothesis::HypothesisResult;
 pub use traits::Shareable;
 pub use uncertain::Uncertain;
