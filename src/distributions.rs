@@ -1,6 +1,7 @@
 #![allow(clippy::cast_precision_loss)]
 
 use crate::Uncertain;
+use crate::error::{Result, UncertainError};
 use crate::traits::Shareable;
 use rand::prelude::*;
 use rand::random;
@@ -36,10 +37,6 @@ where
     /// Returns an error if the components vector is empty or if the weights count
     /// doesn't match the components count.
     ///
-    /// # Panics
-    /// May panic if the components vector is empty when attempting to get the first
-    /// component, which should not happen due to the input validation.
-    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -51,12 +48,9 @@ where
     ///     Some(vec![0.7, 0.3])
     /// ).unwrap();
     /// ```
-    pub fn mixture(
-        components: Vec<Uncertain<T>>,
-        weights: Option<Vec<f64>>,
-    ) -> Result<Self, &'static str> {
+    pub fn mixture(components: Vec<Uncertain<T>>, weights: Option<Vec<f64>>) -> Result<Self> {
         if components.is_empty() {
-            return Err("At least one component required");
+            return Err(UncertainError::EmptyComponents);
         }
 
         if components.len() == 1 {
@@ -66,7 +60,7 @@ where
         let weights = match weights {
             Some(w) => {
                 if w.len() != components.len() {
-                    return Err("Weights count must match components count");
+                    return Err(UncertainError::weight_mismatch(components.len(), w.len()));
                 }
                 w
             }
@@ -104,10 +98,6 @@ where
     /// # Errors
     /// Returns an error if the data vector is empty.
     ///
-    /// # Panics
-    /// May panic if the random number generator fails to select from the data,
-    /// which should not happen if the data is non-empty.
-    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -115,9 +105,9 @@ where
     /// let data = vec![1.0, 2.0, 3.0, 4.0, 5.0];
     /// let empirical = Uncertain::empirical(data).unwrap();
     /// ```
-    pub fn empirical(data: Vec<T>) -> Result<Self, &'static str> {
+    pub fn empirical(data: Vec<T>) -> Result<Self> {
         if data.is_empty() {
-            return Err("Data cannot be empty");
+            return Err(UncertainError::EmptyData);
         }
 
         Ok(Uncertain::new(move || {
@@ -141,10 +131,6 @@ where
     /// # Errors
     /// Returns an error if the probabilities map is empty.
     ///
-    /// # Panics
-    /// May panic if the cumulative probability vector is empty, which should not happen
-    /// if the input validation passes.
-    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -157,9 +143,9 @@ where
     ///
     /// let color = Uncertain::categorical(&probs).unwrap();
     /// ```
-    pub fn categorical(probabilities: &HashMap<T, f64>) -> Result<Self, &'static str> {
+    pub fn categorical(probabilities: &HashMap<T, f64>) -> Result<Self> {
         if probabilities.is_empty() {
-            return Err("Probabilities cannot be empty");
+            return Err(UncertainError::EmptyProbabilities);
         }
 
         let total: f64 = probabilities.values().sum();
@@ -602,9 +588,9 @@ mod tests {
 
     #[test]
     fn test_mixture_empty_components() {
-        let result: Result<Uncertain<f64>, &str> = Uncertain::mixture(vec![], None);
+        let result = Uncertain::<f64>::mixture(vec![], None);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "At least one component required");
+        assert_eq!(result.unwrap_err(), UncertainError::EmptyComponents);
     }
 
     #[test]
@@ -613,17 +599,14 @@ mod tests {
         let normal2 = Uncertain::normal(1.0, 1.0);
         let result = Uncertain::mixture(vec![normal1, normal2], Some(vec![0.5]));
         assert!(result.is_err());
-        assert_eq!(
-            result.unwrap_err(),
-            "Weights count must match components count"
-        );
+        assert_eq!(result.unwrap_err(), UncertainError::weight_mismatch(2, 1));
     }
 
     #[test]
     fn test_empirical_empty_data() {
-        let result: Result<Uncertain<f64>, &str> = Uncertain::empirical(vec![]);
+        let result = Uncertain::<f64>::empirical(vec![]);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Data cannot be empty");
+        assert_eq!(result.unwrap_err(), UncertainError::EmptyData);
     }
 
     #[test]
@@ -631,7 +614,7 @@ mod tests {
         let probs: HashMap<&str, f64> = HashMap::new();
         let result = Uncertain::categorical(&probs);
         assert!(result.is_err());
-        assert_eq!(result.unwrap_err(), "Probabilities cannot be empty");
+        assert_eq!(result.unwrap_err(), UncertainError::EmptyProbabilities);
     }
 
     #[test]

@@ -915,11 +915,13 @@ where
             .into_iter()
             .map(Into::into)
             .collect();
+
         samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         if samples.is_empty() {
             return 0.0;
         }
+
         if samples.len() == 1 {
             return samples[0];
         }
