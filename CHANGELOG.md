@@ -33,10 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error messages now include structured data (e.g., expected vs actual counts)
 - Improved error messages with more context and helpful information
 
-### Migration
-
-See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for detailed migration instructions.
-
 ## [0.2.0] - 2024-09-24
 
 ### Added
