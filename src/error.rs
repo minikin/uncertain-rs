@@ -104,6 +104,7 @@ impl UncertainError {
     /// let error = UncertainError::invalid_parameter("std_dev", -1.0, "must be positive");
     /// assert!(error.to_string().contains("std_dev"));
     /// ```
+    #[must_use]
     pub fn invalid_parameter(
         parameter: &'static str,
         value: f64,
@@ -125,6 +126,7 @@ impl UncertainError {
     /// let error = UncertainError::non_finite("mean", f64::NAN);
     /// assert!(error.to_string().contains("mean"));
     /// ```
+    #[must_use]
     pub fn non_finite(parameter: &'static str, value: f64) -> Self {
         Self::NonFiniteParameter { parameter, value }
     }
@@ -138,6 +140,7 @@ impl UncertainError {
     /// let error = UncertainError::weight_mismatch(3, 2);
     /// assert!(error.to_string().contains("expected 3"));
     /// ```
+    #[must_use]
     pub fn weight_mismatch(expected: usize, actual: usize) -> Self {
         Self::WeightCountMismatch { expected, actual }
     }
@@ -166,6 +169,7 @@ impl UncertainError {
     /// let error = UncertainError::invalid_sample_count(0, "must be greater than zero");
     /// assert!(error.to_string().contains("must be greater than zero"));
     /// ```
+    #[must_use]
     pub fn invalid_sample_count(count: usize, reason: &'static str) -> Self {
         Self::InvalidSampleCount { count, reason }
     }
@@ -179,6 +183,7 @@ impl UncertainError {
     /// let error = UncertainError::invalid_quantile(1.5);
     /// assert!(error.to_string().contains("1.5"));
     /// ```
+    #[must_use]
     pub fn invalid_quantile(value: f64) -> Self {
         Self::InvalidQuantile { value }
     }
@@ -192,6 +197,7 @@ impl UncertainError {
     /// let error = UncertainError::invalid_confidence(1.5);
     /// assert!(error.to_string().contains("1.5"));
     /// ```
+    #[must_use]
     pub fn invalid_confidence(value: f64) -> Self {
         Self::InvalidConfidence { value }
     }
@@ -205,6 +211,7 @@ impl UncertainError {
     /// let error = UncertainError::invalid_bandwidth(-0.1);
     /// assert!(error.to_string().contains("-0.1"));
     /// ```
+    #[must_use]
     pub fn invalid_bandwidth(value: f64) -> Self {
         Self::InvalidBandwidth { value }
     }
@@ -271,7 +278,7 @@ mod tests {
     #[test]
     fn test_invalid_sample_count_error() {
         let error = UncertainError::invalid_sample_count(0, "must be greater than zero");
-        assert!(error.to_string().contains("0"));
+        assert!(error.to_string().contains('0'));
         assert!(error.to_string().contains("must be greater than zero"));
     }
 
