@@ -37,6 +37,10 @@ where
     /// Returns an error if the components vector is empty or if the weights count
     /// doesn't match the components count.
     ///
+    /// # Panics
+    /// This function may panic if the components vector becomes empty after validation,
+    /// which should not happen under normal circumstances.
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -98,6 +102,10 @@ where
     /// # Errors
     /// Returns an error if the data vector is empty.
     ///
+    /// # Panics
+    /// This function may panic if the data vector becomes empty after validation,
+    /// which should not happen under normal circumstances.
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -130,6 +138,11 @@ where
     ///
     /// # Errors
     /// Returns an error if the probabilities map is empty.
+    ///
+    /// # Panics
+    /// This function may panic if the cumulative probability vector becomes empty,
+    /// which should not happen under normal circumstances since we check for empty
+    /// probabilities at the start of the function.
     ///
     /// # Example
     /// ```rust
