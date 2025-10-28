@@ -86,7 +86,6 @@ fn monte_carlo_integration() {
     // Parallel approach
     let start = Instant::now();
     let inside_par = (0..samples)
-        .into_iter()
         .map(|_| {
             let x = uniform.sample();
             let y = uniform.sample();
