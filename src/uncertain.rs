@@ -188,6 +188,41 @@ where
     pub fn take_samples(&self, count: usize) -> Vec<T> {
         self.samples().take(count).collect()
     }
+
+    /// Take a specific number of samples in parallel using rayon
+    ///
+    /// This method generates samples concurrently across multiple threads,
+    /// which can significantly improve performance for large sample counts
+    /// or expensive sampling operations.
+    ///
+    /// **Note:** Sample order is non-deterministic with parallel generation.
+    ///
+    /// # Requirements
+    /// - Requires the `parallel` feature flag
+    /// - `T` must implement `Send` to be safely transferred between threads
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let samples = normal.take_samples_par(10_000);
+    /// ```
+    ///
+    /// # Performance
+    /// For best results, use with:
+    /// - Large sample counts (typically > 1000)
+    /// - Expensive sampling operations (e.g., complex transformations)
+    /// - Available CPU cores for parallelization
+    #[must_use]
+    #[cfg(feature = "parallel")]
+    pub fn take_samples_par(&self, count: usize) -> Vec<T>
+    where
+        T: Send,
+    {
+        use rayon::prelude::*;
+        (0..count).into_par_iter().map(|_| self.sample()).collect()
+    }
 }
 
 impl Uncertain<f64> {
@@ -207,6 +242,40 @@ impl Uncertain<f64> {
     pub fn take_samples_cached(&self, count: usize) -> Vec<f64> {
         crate::cache::dist_cache()
             .get_or_compute_samples(self.id, count, || self.samples().take(count).collect())
+    }
+
+    /// Take samples in parallel with caching for better performance
+    ///
+    /// Combines the benefits of parallel generation and caching. The first call
+    /// generates samples in parallel across multiple threads. Subsequent calls
+    /// with the same count return cached results.
+    ///
+    /// **Note:** Sample order is non-deterministic with parallel generation.
+    ///
+    /// # Requirements
+    /// - Requires the `parallel` feature flag
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let gamma = Uncertain::gamma(2.0, 1.0);
+    /// let samples = gamma.take_samples_cached_par(10_000); // Generated in parallel, then cached
+    /// let same_samples = gamma.take_samples_cached_par(10_000); // Retrieved from cache
+    /// ```
+    ///
+    /// # Performance
+    /// Ideal for:
+    /// - Large sample counts (typically > 1000)
+    /// - Expensive distributions (gamma, beta, etc.)
+    /// - Repeated sampling requests
+    #[must_use]
+    #[cfg(feature = "parallel")]
+    pub fn take_samples_cached_par(&self, count: usize) -> Vec<f64> {
+        use rayon::prelude::*;
+        crate::cache::dist_cache().get_or_compute_samples(self.id, count, || {
+            (0..count).into_par_iter().map(|_| self.sample()).collect()
+        })
     }
 }
 

@@ -49,6 +49,7 @@ if speeding_evidence.probability_exceeds(0.95) {
 - **SPRT hypothesis testing**: Sequential Probability Ratio Test for optimal sampling
 - **Rich distributions**: Normal, uniform, exponential, binomial, categorical, etc.
 - **Statistical analysis**: Mean, std dev, confidence intervals, CDF, etc.
+- **Parallel sampling** (optional): Multi-threaded sample generation using rayon
 
 ## Installation
 
@@ -57,6 +58,9 @@ Add this to your `Cargo.toml`:
 ```toml
 [dependencies]
 uncertain-rs = "0.2.0"
+
+# Enable parallel sampling (optional)
+# uncertain-rs = { version = "0.2.0", features = ["parallel"] }
 ```
 
 ## Quick Start
@@ -102,6 +106,34 @@ match result {
 }
 ```
 ## Advanced Features
+
+### Parallel Sampling
+
+Enable the `parallel` feature to unlock multi-threaded sample generation for significant performance improvements with large sample counts:
+
+```rust
+use uncertain_rs::Uncertain;
+
+let normal = Uncertain::normal(0.0, 1.0);
+
+// Sequential sampling
+let samples = normal.take_samples(100_000);
+
+// Parallel sampling (requires 'parallel' feature)
+let samples_par = normal.take_samples_par(100_000); // ~2-4x faster on multi-core systems
+
+// Parallel + caching for f64 distributions
+let gamma = Uncertain::gamma(2.0, 1.0);
+let cached = gamma.take_samples_cached_par(100_000); // Fast generation + reuse
+```
+
+**When to use parallel sampling:**
+- Large sample counts (typically > 1,000)
+- Expensive sampling operations (complex transformations, costly distributions)
+- Multi-core systems available for parallelization
+- Monte Carlo simulations and statistical analysis
+
+See the [parallel sampling example](examples/parallel_sampling.rs) for benchmarks and use cases.
 
 ### Graph Optimization
 

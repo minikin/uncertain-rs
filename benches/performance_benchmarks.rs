@@ -294,6 +294,85 @@ fn benchmark_cache_overhead(c: &mut Criterion) {
     group.finish();
 }
 
+#[cfg(feature = "parallel")]
+fn benchmark_parallel_sampling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("parallel_sampling");
+    group.measurement_time(Duration::from_secs(10));
+
+    let sample_counts = vec![1_000, 10_000, 100_000];
+
+    for &count in &sample_counts {
+        let normal = Uncertain::normal(0.0, 1.0);
+
+        group.bench_function(format!("normal_sequential_{}", count), |b| {
+            b.iter(|| black_box(normal.take_samples(count)));
+        });
+
+        group.bench_function(format!("normal_parallel_{}", count), |b| {
+            b.iter(|| black_box(normal.take_samples_par(count)));
+        });
+
+        let gamma = Uncertain::gamma(2.0, 1.0);
+
+        group.bench_function(format!("gamma_sequential_{}", count), |b| {
+            b.iter(|| black_box(gamma.take_samples(count)));
+        });
+
+        group.bench_function(format!("gamma_parallel_{}", count), |b| {
+            b.iter(|| black_box(gamma.take_samples_par(count)));
+        });
+
+        group.bench_function(format!("gamma_cached_sequential_{}", count), |b| {
+            b.iter_with_setup(
+                || {
+                    cache::clear_global_caches();
+                    Uncertain::gamma(2.0, 1.0)
+                },
+                |dist| black_box(dist.take_samples_cached(count)),
+            );
+        });
+
+        group.bench_function(format!("gamma_cached_parallel_{}", count), |b| {
+            b.iter_with_setup(
+                || {
+                    cache::clear_global_caches();
+                    Uncertain::gamma(2.0, 1.0)
+                },
+                |dist| black_box(dist.take_samples_cached_par(count)),
+            );
+        });
+    }
+
+    let base = Uncertain::normal(50.0, 10.0);
+    let transformed = base
+        .map(|x| x.powi(2))
+        .map(|x| x.sqrt())
+        .map(|x| (x / 10.0).sin() * 100.0);
+
+    group.bench_function("complex_transform_sequential_10k", |b| {
+        b.iter(|| black_box(transformed.take_samples(10_000)));
+    });
+
+    group.bench_function("complex_transform_parallel_10k", |b| {
+        b.iter(|| black_box(transformed.take_samples_par(10_000)));
+    });
+
+    group.finish();
+}
+
+#[cfg(feature = "parallel")]
+criterion_group!(
+    benches,
+    benchmark_statistical_operations,
+    benchmark_interval_operations,
+    benchmark_pdf_operations,
+    benchmark_distribution_sampling,
+    benchmark_computation_graphs,
+    benchmark_cache_overhead,
+    benchmark_parallel_sampling
+);
+
+#[cfg(not(feature = "parallel"))]
 criterion_group!(
     benches,
     benchmark_statistical_operations,

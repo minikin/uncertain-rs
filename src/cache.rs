@@ -619,7 +619,7 @@ mod tests {
             let cache_clone = Arc::clone(&cache);
             let handle = thread::spawn(move || {
                 cache_clone.insert(format!("key{i}"), i);
-                cache_clone.get(&format!("key{i}"))
+                cache_clone.get(format!("key{i}"))
             });
             handles.push(handle);
         }
