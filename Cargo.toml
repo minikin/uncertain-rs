@@ -22,7 +22,7 @@ parallel = ["rayon"]
 
 [dev-dependencies]
 approx = "0.5"
-criterion = { version = "0.7", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 
 [[bench]]
 name = "performance_benchmarks"
