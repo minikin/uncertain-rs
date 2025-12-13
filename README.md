@@ -12,10 +12,11 @@ A Rust library for uncertainty-aware programming, implementing the approach from
   - [Features](#features)
   - [Installation](#installation)
   - [Quick Start](#quick-start)
+  - [Error Handling](#error-handling)
   - [Advanced Features](#advanced-features)
+    - [Parallel Sampling](#parallel-sampling)
     - [Graph Optimization](#graph-optimization)
   - [Development Workflow](#development-workflow)
-    - [Security](#security)
   - [Contributing](#contributing)
   - [License](#license)
 
@@ -105,6 +106,7 @@ match result {
     Ok(dist) => { /* use dist */ }
 }
 ```
+
 ## Advanced Features
 
 ### Parallel Sampling
@@ -128,6 +130,7 @@ let cached = gamma.take_samples_cached_par(100_000); // Fast generation + reuse
 ```
 
 **When to use parallel sampling:**
+
 - Large sample counts (typically > 1,000)
 - Expensive sampling operations (complex transformations, costly distributions)
 - Multi-core systems available for parallelization
@@ -169,16 +172,6 @@ We use [just](https://github.com/casey/just) as a task runner. Available command
 - `just test` - Run tests
 - `just audit` - Security audit (check for vulnerabilities)
 - `just dev` - Run the full development workflow (format + lint + test + audit)
-
-### Security
-
-This project takes security seriously. We run `cargo audit` to check for known vulnerabilities in dependencies:
-
-- **CI**: Automated security audits run on every push and PR
-- **Local**: Run `just audit` or `cargo audit` before submitting changes
-- **Installation**: If you don't have `cargo-audit`, run `cargo install cargo-audit`
-
-The security audit checks all dependencies against the [RustSec Advisory Database](https://rustsec.org/).
 
 ## Contributing
 
