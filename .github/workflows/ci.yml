@@ -148,8 +148,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup Rust for deny
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key-suffix: -deny
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
       - name: Run cargo-deny
-        uses: EmbarkStudios/cargo-deny-action@v2
+        run: cargo deny --all-features check
 
   semver:
     name: SemVer Check
