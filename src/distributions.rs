@@ -2,10 +2,9 @@
 
 use crate::Uncertain;
 use crate::error::{Result, UncertainError};
+use crate::rng::{random_f64, with_rng};
 use crate::traits::Shareable;
 use rand::prelude::*;
-use rand::random;
-use rand::rng;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
@@ -138,7 +137,7 @@ where
             .collect();
 
         Ok(Uncertain::new(move || {
-            let r: f64 = random();
+            let r: f64 = random_f64();
             let idx = cumulative
                 .iter()
                 .position(|&x| r <= x)
@@ -171,9 +170,7 @@ where
         }
 
         Ok(Uncertain::new(move || {
-            data.choose(&mut rng())
-                .cloned()
-                .unwrap_or_else(|| data[0].clone())
+            with_rng(|rng| data.choose(rng).cloned().unwrap_or_else(|| data[0].clone()))
         }))
     }
 }
@@ -218,7 +215,7 @@ where
         }
 
         Ok(Uncertain::new(move || {
-            let r: f64 = random();
+            let r: f64 = random_f64();
             cumulative.iter().find(|(_, cum)| r <= *cum).map_or_else(
                 || cumulative[cumulative.len() - 1].0.clone(),
                 |(val, _)| val.clone(),
@@ -255,8 +252,8 @@ impl Uncertain<f64> {
     fn normal_unchecked(mean: f64, std_dev: f64) -> Self {
         Uncertain::new(move || {
             // Box-Muller transform for normal distribution
-            let u1: f64 = random::<f64>().clamp(0.001, 0.999);
-            let u2: f64 = random::<f64>().clamp(0.001, 0.999);
+            let u1: f64 = random_f64().clamp(0.001, 0.999);
+            let u2: f64 = random_f64().clamp(0.001, 0.999);
             let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * PI * u2).cos();
             mean + std_dev * z0
         })
@@ -288,7 +285,7 @@ impl Uncertain<f64> {
                 "must be less than or equal to max",
             ));
         }
-        Ok(Uncertain::new(move || min + (max - min) * random::<f64>()))
+        Ok(Uncertain::new(move || min + (max - min) * random_f64()))
     }
 
     /// Creates an exponential distribution
@@ -307,7 +304,7 @@ impl Uncertain<f64> {
     /// ```
     pub fn exponential(rate: f64) -> Result<Self> {
         validate_positive("rate", rate)?;
-        Ok(Uncertain::new(move || -random::<f64>().ln() / rate))
+        Ok(Uncertain::new(move || -random_f64().ln() / rate))
     }
 
     /// Creates a log-normal distribution
@@ -353,8 +350,8 @@ impl Uncertain<f64> {
         Ok(Uncertain::new(move || {
             // Using rejection sampling method
             loop {
-                let u1: f64 = random();
-                let u2: f64 = random();
+                let u1: f64 = random_f64();
+                let u2: f64 = random_f64();
 
                 let x = u1.powf(1.0 / alpha);
                 let y = u2.powf(1.0 / beta);
@@ -401,7 +398,7 @@ impl Uncertain<f64> {
                     let v = (1.0 + c * normal_sample).powi(3);
 
                     if v > 0.0 {
-                        let u: f64 = random();
+                        let u: f64 = random_f64();
                         if u < 1.0 - 0.0331 * normal_sample.powi(4) {
                             return d * v * scale;
                         }
@@ -413,7 +410,7 @@ impl Uncertain<f64> {
             } else {
                 // For shape < 1, use transformation
                 let gamma_1_plus_shape = Self::gamma_unchecked(shape + 1.0, scale).sample();
-                let u: f64 = random();
+                let u: f64 = random_f64();
                 gamma_1_plus_shape * u.powf(1.0 / shape)
             }
         })
@@ -438,7 +435,7 @@ impl Uncertain<bool> {
     /// ```
     pub fn bernoulli(probability: f64) -> Result<Self> {
         validate_unit_interval("probability", probability)?;
-        Ok(Uncertain::new(move || random::<f64>() < probability))
+        Ok(Uncertain::new(move || random_f64() < probability))
     }
 }
 
@@ -474,7 +471,7 @@ where
         Ok(Uncertain::new(move || {
             let mut count = T::default();
             for _ in 0..trials {
-                if random::<f64>() < probability {
+                if random_f64() < probability {
                     count += T::from(1);
                 }
             }
@@ -506,7 +503,7 @@ where
 
             loop {
                 k += T::from(1);
-                p *= random::<f64>();
+                p *= random_f64();
                 if p <= l {
                     break;
                 }
@@ -536,7 +533,7 @@ where
         validate_left_open_unit_interval("probability", probability)?;
         Ok(Uncertain::new(move || {
             let mut trials = T::from(1);
-            while random::<f64>() >= probability {
+            while random_f64() >= probability {
                 trials += T::from(1);
             }
             trials

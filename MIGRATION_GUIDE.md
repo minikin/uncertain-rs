@@ -1,5 +1,15 @@
 # Migration Guide: 0.2.x → 0.3.0
 
+## New: reproducible sampling (no migration needed)
+
+This is additive, not breaking — nothing to change in existing code. `sample()`/
+`take_samples()` are unchanged (thread-local randomness, as before). New:
+`sample_with`/`take_samples_with` take a `&mut ChaCha8Rng` (from the new `rand_chacha`
+dependency) and produce bitwise-identical results for identically-seeded RNGs, across
+runs and platforms. With the `parallel` feature, `take_samples_with_par(seed, count)`
+gives the same guarantee independent of thread count. See the
+[Reproducible Sampling](README.md#reproducible-sampling) section of the README.
+
 ## `Uncertain<T>` no longer implements `PartialEq`/`PartialOrd`
 
 `a == b`, `a < b`, `a.partial_cmp(&b)` on two `Uncertain<T>` values no longer compile.
