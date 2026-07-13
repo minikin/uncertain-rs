@@ -18,7 +18,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 | 07 | [Sound constant folding](07-sound-constant-folding.md) | P0 | Medium | no | Pending |
 | 08 | [Effective CSE](08-effective-cse.md) | P1 | Medium | no | Pending |
 | 09 | [Consistent variance policy](09-variance-policy.md) | P1 | Low | behavioral | Pending |
-| 10 | [Bounded caches, no NaN paths](10-bounded-caches.md) | P1 | Medium | no | Pending |
+| 10 | [Bounded caches, no NaN paths](10-bounded-caches.md) | P1 | Medium | no | Partially implemented |
 | 11 | [Property-based testing](11-property-based-testing.md) | P1 | Medium | no | Pending |
 | 12 | [Serde support](12-serde-support.md) | P2 | Low | no | Pending |
 | 13 | [More distributions](13-more-distributions.md) | P2 | Medium | no | Pending |

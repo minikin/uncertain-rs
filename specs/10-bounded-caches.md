@@ -1,6 +1,6 @@
 # Spec 10 — Bounded Caches & No Silent NaN Paths
 
-**Status:** Pending | **Effort:** Medium | **Module:** `src/cache.rs`, `src/statistics.rs`, `src/hypothesis.rs`, `src/operations/logical.rs`
+**Status:** Partially implemented | **Effort:** Medium | **Module:** `src/cache.rs`, `src/statistics.rs`, `src/hypothesis.rs`, `src/operations/logical.rs`
 
 ## Context
 
@@ -8,9 +8,18 @@ Two global `LazyLock` caches (`src/cache.rs:15-18`) keyed by `(uuid, sample_coun
 without bound: entries expire only by TTL and only when `cleanup_*` is called manually —
 a long-running process creating many distributions leaks memory. Caching *samples* also
 changes observable behavior (a cached vector returned later ≠ a fresh draw), forcing tests
-to call `clear_global_caches()`. Half the cache API is dead: `StatisticsCache::
-get_or_compute_{expected_value,variance,std_dev,confidence_interval,quantile}` have no
-callers; only skewness/kurtosis/cdf/pdf_kde actually use the cache. Separately, two silent
+to call `clear_global_caches()`.
+
+**Item 2 partially done** (landed opportunistically on the `spec/02-validated-constructors`
+branch, PR #17, while fixing a genuinely broken test —
+`test_different_precision_cache_hits` failed even on plain `main` because
+`Uncertain::confidence_interval` never consulted the cache it was testing): `expected_value`,
+`variance`, `confidence_interval`, and `quantile` on `Uncertain<T>` now call
+`cache::stats_cache().get_or_compute_*`, matching the pattern `skewness`/`kurtosis`/`cdf`/
+`pdf_kde` already used. `get_or_compute_std_dev` had no caller anywhere (not even in
+`standard_deviation`, which derives from the now-cached `variance` and doesn't need its own
+entry) and was deleted rather than wired up. Remaining for this spec: the bounded/LRU
+eviction (item 1) and the NaN-path guards (items 5–6) below are still open — two silent
 NaN paths exist: `probability()` divides by `samples.len()` without an empty guard
 (`src/operations/logical.rs:182`), and `bayesian_update` divides by `1.0 − evidence_total`
 which can be zero (`src/hypothesis.rs:282`).
@@ -20,8 +29,10 @@ which can be zero (`src/hypothesis.rs:282`).
 1. Caches get a hard size bound with LRU (or LRU-ish) eviction; eviction happens inline on
    insert — no reliance on manual `cleanup_*` calls. Default capacity is documented and
    configurable.
-2. Dead `get_or_compute_*` methods are either wired up (statistics actually consult the
-   cache) or deleted — no dead public surface remains. Decision recorded in the spec PR.
+2. ~~Dead `get_or_compute_*` methods are either wired up (statistics actually consult the
+   cache) or deleted — no dead public surface remains.~~ **Done** (see Context): all five
+   originally-dead methods are now either wired up (`expected_value`, `variance`,
+   `confidence_interval`, `quantile`) or deleted (`std_dev`).
 3. Cache policy is documented: what is cached, key, TTL, capacity, and the implication
    that cached sample vectors are reused (or sample-caching is dropped in favor of caching
    derived statistics only — preferred, since it removes the behavioral surprise; pick one

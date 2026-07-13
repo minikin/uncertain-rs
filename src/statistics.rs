@@ -602,12 +602,14 @@ where
     where
         T: Into<f64>,
     {
-        let samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        samples.iter().sum::<f64>() / sample_count as f64
+        cache::stats_cache().get_or_compute_expected_value(self.id, sample_count, || {
+            let samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
+            samples.iter().sum::<f64>() / sample_count as f64
+        })
     }
 
     /// Calculates the expected value using adaptive sampling for better efficiency
@@ -691,23 +693,25 @@ where
     where
         T: Into<f64>,
     {
-        let samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_variance(self.id, sample_count, || {
+            let samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        let mean = samples.iter().sum::<f64>() / sample_count as f64;
+            let mean = samples.iter().sum::<f64>() / sample_count as f64;
 
-        // Use numerically stable variance calculation
-        samples
-            .iter()
-            .map(|x| {
-                let diff = x - mean;
-                diff * diff
-            })
-            .sum::<f64>()
-            / sample_count as f64
+            // Use numerically stable variance calculation
+            samples
+                .iter()
+                .map(|x| {
+                    let diff = x - mean;
+                    diff * diff
+                })
+                .sum::<f64>()
+                / sample_count as f64
+        })
     }
 
     /// Calculates the standard deviation of the distribution
@@ -843,21 +847,29 @@ where
     where
         T: Into<f64> + PartialOrd,
     {
-        let mut samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        cache::stats_cache().get_or_compute_confidence_interval(
+            self.id,
+            sample_count,
+            confidence,
+            || {
+                let mut samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        let alpha = 1.0 - confidence;
-        let lower_idx = ((alpha / 2.0) * samples.len() as f64) as usize;
-        let upper_idx = (((1.0 - alpha / 2.0) * samples.len() as f64) as usize).saturating_sub(1);
+                let alpha = 1.0 - confidence;
+                let lower_idx = ((alpha / 2.0) * samples.len() as f64) as usize;
+                let upper_idx =
+                    (((1.0 - alpha / 2.0) * samples.len() as f64) as usize).saturating_sub(1);
 
-        let lower_idx = lower_idx.min(samples.len() - 1);
-        let upper_idx = upper_idx.min(samples.len() - 1);
+                let lower_idx = lower_idx.min(samples.len() - 1);
+                let upper_idx = upper_idx.min(samples.len() - 1);
 
-        (samples[lower_idx], samples[upper_idx])
+                (samples[lower_idx], samples[upper_idx])
+            },
+        )
     }
 
     /// Estimates the cumulative distribution function (CDF) at a given value
@@ -910,34 +922,36 @@ where
     where
         T: Into<f64> + PartialOrd,
     {
-        let mut samples: Vec<f64> = self
-            .take_samples(sample_count)
-            .into_iter()
-            .map(Into::into)
-            .collect();
+        cache::stats_cache().get_or_compute_quantile(self.id, sample_count, q, || {
+            let mut samples: Vec<f64> = self
+                .take_samples(sample_count)
+                .into_iter()
+                .map(Into::into)
+                .collect();
 
-        samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-        if samples.is_empty() {
-            return 0.0;
-        }
+            if samples.is_empty() {
+                return 0.0;
+            }
 
-        if samples.len() == 1 {
-            return samples[0];
-        }
+            if samples.len() == 1 {
+                return samples[0];
+            }
 
-        let position = q * (samples.len() - 1) as f64;
-        let lower_idx = position.floor() as usize;
-        let upper_idx = position.ceil() as usize;
+            let position = q * (samples.len() - 1) as f64;
+            let lower_idx = position.floor() as usize;
+            let upper_idx = position.ceil() as usize;
 
-        if lower_idx == upper_idx {
-            samples[lower_idx.min(samples.len() - 1)]
-        } else {
-            let lower_val = samples[lower_idx];
-            let upper_val = samples[upper_idx.min(samples.len() - 1)];
-            let weight = position - lower_idx as f64;
-            lower_val + weight * (upper_val - lower_val)
-        }
+            if lower_idx == upper_idx {
+                samples[lower_idx.min(samples.len() - 1)]
+            } else {
+                let lower_val = samples[lower_idx];
+                let upper_val = samples[upper_idx.min(samples.len() - 1)];
+                let weight = position - lower_idx as f64;
+                lower_val + weight * (upper_val - lower_val)
+            }
+        })
     }
 
     /// Calculates the interquartile range (IQR)
