@@ -300,6 +300,17 @@ mod tests {
     }
 
     #[test]
+    fn test_logical_xor() {
+        let t = Uncertain::point(true);
+        let f = Uncertain::point(false);
+
+        assert!(!t.xor(&t).sample());
+        assert!(t.xor(&f).sample());
+        assert!(f.xor(&t).sample());
+        assert!(!f.xor(&f).sample());
+    }
+
+    #[test]
     fn test_shared_variable_semantics() {
         // Test that logical operations work (shared variable semantics need further development)
         let x = Uncertain::normal(0.0, 1.0).unwrap();

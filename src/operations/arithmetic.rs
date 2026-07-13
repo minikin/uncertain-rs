@@ -400,4 +400,53 @@ mod tests {
         let y = Uncertain::point(2.0);
         assert!((y.pow(3.0).sample() - 8.0_f64).abs() < f64::EPSILON);
     }
+
+    #[test]
+    fn test_arithmetic_zero_and_one() {
+        assert!((<f64 as Arithmetic>::zero() - 0.0).abs() < f64::EPSILON);
+        assert!((<f64 as Arithmetic>::one() - 1.0).abs() < f64::EPSILON);
+        assert!((<f32 as Arithmetic>::zero() - 0.0).abs() < f32::EPSILON);
+        assert!((<f32 as Arithmetic>::one() - 1.0).abs() < f32::EPSILON);
+        assert_eq!(<i32 as Arithmetic>::zero(), 0);
+        assert_eq!(<i32 as Arithmetic>::one(), 1);
+        assert_eq!(<i64 as Arithmetic>::zero(), 0);
+        assert_eq!(<i64 as Arithmetic>::one(), 1);
+        assert_eq!(<u32 as Arithmetic>::zero(), 0);
+        assert_eq!(<u32 as Arithmetic>::one(), 1);
+        assert_eq!(<u64 as Arithmetic>::zero(), 0);
+        assert_eq!(<u64 as Arithmetic>::one(), 1);
+    }
+
+    #[test]
+    fn test_scalar_minus_uncertain() {
+        let result = 5.0 - Uncertain::point(2.0);
+        assert!((result.sample() - 3.0_f64).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scalar_times_uncertain() {
+        let result = 3.0 * Uncertain::point(2.0);
+        assert!((result.sample() - 6.0_f64).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_uncertain_div_scalar() {
+        let result = Uncertain::point(10.0) / 2.0;
+        assert!((result.sample() - 5.0_f64).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_scalar_div_uncertain() {
+        let result = 10.0 / Uncertain::point(2.0);
+        assert!((result.sample() - 5.0_f64).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_negation() {
+        let result = -Uncertain::point(5.0);
+        assert!((result.sample() - (-5.0_f64)).abs() < f64::EPSILON);
+
+        let result_neg = -Uncertain::point(-3.0);
+        assert!((result_neg.sample() - 3.0_f64).abs() < f64::EPSILON);
+    }
 }

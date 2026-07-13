@@ -54,14 +54,18 @@ crap-update-baseline:
 dev: fmt-check lint test test-parallel test-doc audit deny crap
 
 # Mutation testing on files changed vs main (re-runs dev first)
+# --all-features is required: without it, mutants behind #[cfg(feature = "parallel")]
+# aren't compiled at all, so cargo-mutants reports them (and their guarding tests) as
+# MISSED regardless of actual test quality -- the mutation is a no-op if the code
+# doesn't exist in the build.
 dev-mutants-diff: dev
     mkdir -p target
     git diff origin/main...HEAD -- '*.rs' > target/mutants-diff.patch
-    cargo mutants --in-diff target/mutants-diff.patch
+    cargo mutants --all-features --in-diff target/mutants-diff.patch
 
 # Full mutation-testing run across the whole crate (slow)
 mutants:
-    cargo mutants
+    cargo mutants --all-features
 
 # Run the criterion benchmark suite
 bench:

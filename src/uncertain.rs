@@ -509,11 +509,46 @@ mod tests {
     }
 
     #[test]
+    fn test_id_is_stable_and_unique() {
+        let a = Uncertain::new(|| 1.0_f64);
+        let b = Uncertain::new(|| 1.0_f64);
+        assert_ne!(a.id(), b.id());
+        assert_eq!(a.id(), a.id());
+    }
+
+    #[test]
+    fn test_take_samples_cached_returns_requested_length_and_real_data() {
+        let uniform = Uncertain::uniform(0.0, 100.0).unwrap();
+        let samples = uniform.take_samples_cached(500);
+        assert_eq!(samples.len(), 500);
+        // A uniform(0,100) sample set should not be all-0, all-1, or all--1.
+        assert!(!samples.iter().all(|&x| x == 0.0));
+        assert!(!samples.iter().all(|&x| x == 1.0));
+        assert!(!samples.iter().all(|&x| x == -1.0));
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((10.0..90.0).contains(&mean));
+    }
+
+    #[test]
     fn test_less_than() {
         let smaller = Uncertain::new(|| 1.0);
         let larger = Uncertain::new(|| 2.0);
         let comparison = smaller.less_than(&larger);
         assert!(comparison.sample());
+    }
+
+    #[test]
+    fn test_less_than_equal_values_is_false() {
+        let a = Uncertain::new(|| 5.0);
+        let b = Uncertain::new(|| 5.0);
+        assert!(!a.less_than(&b).sample());
+    }
+
+    #[test]
+    fn test_greater_than_equal_values_is_false() {
+        let a = Uncertain::new(|| 5.0);
+        let b = Uncertain::new(|| 5.0);
+        assert!(!a.greater_than(&b).sample());
     }
 
     #[test]
@@ -570,6 +605,21 @@ mod tests {
     }
 
     #[test]
+    fn test_partial_ord_lt_gt_boundary() {
+        let a = Uncertain::point(5.0);
+        let b = Uncertain::point(5.0);
+        let smaller = Uncertain::point(3.0);
+        let larger = Uncertain::point(7.0);
+
+        assert!(!PartialOrd::lt(&a, &b));
+        assert!(!PartialOrd::gt(&a, &b));
+        assert!(PartialOrd::lt(&smaller, &larger));
+        assert!(!PartialOrd::lt(&larger, &smaller));
+        assert!(PartialOrd::gt(&larger, &smaller));
+        assert!(!PartialOrd::gt(&smaller, &larger));
+    }
+
+    #[test]
     fn test_debug_formatting() {
         let uncertain = Uncertain::new(|| 42);
         let debug_str = format!("{uncertain:?}");
@@ -618,10 +668,22 @@ mod tests {
     }
 
     #[test]
+    fn test_gt_method_boundary() {
+        let value = Uncertain::new(|| 60.0);
+        assert!(!value.gt(60.0).sample()); // 60 is not > 60
+    }
+
+    #[test]
     fn test_lt_method_api() {
         let temperature = Uncertain::new(|| -5.0);
         let freezing_evidence = temperature.lt(0.0);
         assert!(freezing_evidence.sample()); // -5 < 0
+    }
+
+    #[test]
+    fn test_lt_method_boundary() {
+        let value = Uncertain::new(|| 0.0);
+        assert!(!value.lt(0.0).sample()); // 0 is not < 0
     }
 
     #[test]
@@ -665,5 +727,31 @@ mod tests {
         let high_speed = Uncertain::point(70.0);
         let high_speed_evidence = high_speed.gt(60.0);
         assert!(high_speed_evidence.probability_exceeds(0.95));
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn test_take_samples_par_returns_requested_length_and_real_data() {
+        let uniform = Uncertain::uniform(0.0, 100.0).unwrap();
+        let samples = uniform.take_samples_par(500);
+        assert_eq!(samples.len(), 500);
+        assert!(!samples.iter().all(|&x| x == 0.0));
+        assert!(!samples.iter().all(|&x| x == 1.0));
+        assert!(!samples.iter().all(|&x| x == -1.0));
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((10.0..90.0).contains(&mean));
+    }
+
+    #[cfg(feature = "parallel")]
+    #[test]
+    fn test_take_samples_cached_par_returns_requested_length_and_real_data() {
+        let uniform = Uncertain::uniform(0.0, 100.0).unwrap();
+        let samples = uniform.take_samples_cached_par(500);
+        assert_eq!(samples.len(), 500);
+        assert!(!samples.iter().all(|&x| x == 0.0));
+        assert!(!samples.iter().all(|&x| x == 1.0));
+        assert!(!samples.iter().all(|&x| x == -1.0));
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        assert!((10.0..90.0).contains(&mean));
     }
 }

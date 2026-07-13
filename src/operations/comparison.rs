@@ -235,4 +235,78 @@ mod tests {
         let true_ratio = samples.iter().filter(|&&x| x).count() as f64 / samples.len() as f64;
         assert!(true_ratio > 0.8);
     }
+
+    #[test]
+    fn test_comparison_trait_gt_boundary() {
+        let value = Uncertain::point(5.0);
+        assert!(!Comparison::gt(&value, 5.0).sample());
+        assert!(Comparison::gt(&value, 4.0).sample());
+        assert!(!Comparison::gt(&value, 6.0).sample());
+    }
+
+    #[test]
+    fn test_gt_uncertain_boundary() {
+        let equal_a = Uncertain::point(5.0);
+        let equal_b = Uncertain::point(5.0);
+        assert!(!equal_a.gt_uncertain(&equal_b).sample());
+
+        let larger = Uncertain::point(5.0);
+        let smaller = Uncertain::point(3.0);
+        assert!(larger.gt_uncertain(&smaller).sample());
+        assert!(!smaller.gt_uncertain(&larger).sample());
+    }
+
+    #[test]
+    fn test_comparison_trait_lt_boundary() {
+        let value = Uncertain::point(5.0);
+        assert!(Comparison::lt(&value, 6.0).sample());
+        assert!(!Comparison::lt(&value, 5.0).sample());
+        assert!(!Comparison::lt(&value, 4.0).sample());
+    }
+
+    #[test]
+    fn test_comparison_trait_ge_boundary() {
+        let value = Uncertain::point(5.0);
+        assert!(Comparison::ge(&value, 5.0).sample());
+        assert!(Comparison::ge(&value, 4.0).sample());
+        assert!(!Comparison::ge(&value, 6.0).sample());
+    }
+
+    #[test]
+    fn test_comparison_trait_le_boundary() {
+        let value = Uncertain::point(5.0);
+        assert!(Comparison::le(&value, 5.0).sample());
+        assert!(Comparison::le(&value, 6.0).sample());
+        assert!(!Comparison::le(&value, 4.0).sample());
+    }
+
+    #[test]
+    fn test_comparison_trait_eq_and_ne() {
+        let value = Uncertain::point(5.0);
+        assert!(Comparison::eq(&value, 5.0).sample());
+        assert!(!Comparison::eq(&value, 4.0).sample());
+        assert!(Comparison::ne(&value, 4.0).sample());
+        assert!(!Comparison::ne(&value, 5.0).sample());
+    }
+
+    #[test]
+    fn test_lt_uncertain_boundary() {
+        let equal_a = Uncertain::point(5.0);
+        let equal_b = Uncertain::point(5.0);
+        assert!(!equal_a.lt_uncertain(&equal_b).sample());
+
+        let smaller = Uncertain::point(3.0);
+        let larger = Uncertain::point(5.0);
+        assert!(smaller.lt_uncertain(&larger).sample());
+        assert!(!larger.lt_uncertain(&smaller).sample());
+    }
+
+    #[test]
+    fn test_eq_uncertain_boundary() {
+        let a = Uncertain::point(5.0);
+        let b = Uncertain::point(5.0);
+        let c = Uncertain::point(6.0);
+        assert!(a.eq_uncertain(&b).sample());
+        assert!(!a.eq_uncertain(&c).sample());
+    }
 }
