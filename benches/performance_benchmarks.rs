@@ -7,14 +7,14 @@ fn benchmark_statistical_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("statistical_operations");
     group.measurement_time(Duration::from_secs(10));
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
     let sample_count = 10000;
 
     group.bench_function("expected_value_first_run", |b| {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| black_box(dist.expected_value(sample_count)),
         );
@@ -29,7 +29,7 @@ fn benchmark_statistical_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| black_box(dist.variance(sample_count)),
         );
@@ -44,7 +44,7 @@ fn benchmark_statistical_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| black_box(dist.standard_deviation(sample_count)),
         );
@@ -59,7 +59,7 @@ fn benchmark_statistical_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| black_box(dist.skewness(sample_count)),
         );
@@ -74,7 +74,7 @@ fn benchmark_statistical_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| black_box(dist.kurtosis(sample_count)),
         );
@@ -93,14 +93,14 @@ fn benchmark_interval_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("interval_operations");
     group.measurement_time(Duration::from_secs(8));
 
-    let normal = Uncertain::normal(100.0, 15.0);
+    let normal = Uncertain::normal(100.0, 15.0).unwrap();
     let sample_count = 5000;
 
     group.bench_function("confidence_interval_first_run", |b| {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(100.0, 15.0)
+                Uncertain::normal(100.0, 15.0).unwrap()
             },
             |dist| black_box(dist.confidence_interval(0.95, sample_count)),
         );
@@ -115,7 +115,7 @@ fn benchmark_interval_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(100.0, 15.0)
+                Uncertain::normal(100.0, 15.0).unwrap()
             },
             |dist| black_box(dist.cdf(100.0, sample_count)),
         );
@@ -130,7 +130,7 @@ fn benchmark_interval_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(100.0, 15.0)
+                Uncertain::normal(100.0, 15.0).unwrap()
             },
             |dist| black_box(dist.quantile(0.5, sample_count)),
         );
@@ -149,7 +149,7 @@ fn benchmark_pdf_operations(c: &mut Criterion) {
     let mut group = c.benchmark_group("pdf_operations");
     group.measurement_time(Duration::from_secs(15));
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
     let sample_count = 2000; // Smaller sample count for expensive operation
     let bandwidth = 0.1;
 
@@ -157,7 +157,7 @@ fn benchmark_pdf_operations(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| black_box(dist.pdf_kde(0.0, sample_count, bandwidth)),
         );
@@ -177,13 +177,13 @@ fn benchmark_distribution_sampling(c: &mut Criterion) {
 
     let sample_count = 1000;
 
-    let gamma = Uncertain::gamma(2.0, 1.0);
+    let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
 
     group.bench_function("gamma_samples_first_run", |b| {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::gamma(2.0, 1.0)
+                Uncertain::gamma(2.0, 1.0).unwrap()
             },
             |dist| black_box(dist.take_samples_cached(sample_count)),
         );
@@ -194,13 +194,13 @@ fn benchmark_distribution_sampling(c: &mut Criterion) {
         b.iter(|| black_box(gamma.take_samples_cached(sample_count)));
     });
 
-    let beta = Uncertain::beta(2.0, 5.0);
+    let beta = Uncertain::beta(2.0, 5.0).unwrap();
 
     group.bench_function("beta_samples_first_run", |b| {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::beta(2.0, 5.0)
+                Uncertain::beta(2.0, 5.0).unwrap()
             },
             |dist| black_box(dist.take_samples_cached(sample_count)),
         );
@@ -221,8 +221,8 @@ fn benchmark_computation_graphs(c: &mut Criterion) {
     let sample_count = 1000;
 
     // Complex expression: (x + y) * (x - y) where x and y are uncertain
-    let x = Uncertain::normal(5.0, 1.0);
-    let y = Uncertain::normal(3.0, 1.0);
+    let x = Uncertain::normal(5.0, 1.0).unwrap();
+    let y = Uncertain::normal(3.0, 1.0).unwrap();
     let complex_expr = (x.clone() + y.clone()) * (x - y);
 
     group.bench_function("complex_expression_expected_value", |b| {
@@ -248,14 +248,14 @@ fn benchmark_computation_graphs(c: &mut Criterion) {
 fn benchmark_cache_overhead(c: &mut Criterion) {
     let mut group = c.benchmark_group("cache_overhead");
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     // Small sample counts where caching might not be beneficial
     group.bench_function("small_samples_no_cache", |b| {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| {
                 let samples: Vec<f64> = dist.take_samples(100);
@@ -275,7 +275,7 @@ fn benchmark_cache_overhead(c: &mut Criterion) {
         b.iter_with_setup(
             || {
                 cache::clear_global_caches();
-                Uncertain::normal(0.0, 1.0)
+                Uncertain::normal(0.0, 1.0).unwrap()
             },
             |dist| {
                 let samples: Vec<f64> = dist.take_samples(10000);
@@ -302,7 +302,7 @@ fn benchmark_parallel_sampling(c: &mut Criterion) {
     let sample_counts = vec![1_000, 10_000, 100_000];
 
     for &count in &sample_counts {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
         group.bench_function(format!("normal_sequential_{}", count), |b| {
             b.iter(|| black_box(normal.take_samples(count)));
@@ -312,7 +312,7 @@ fn benchmark_parallel_sampling(c: &mut Criterion) {
             b.iter(|| black_box(normal.take_samples_par(count)));
         });
 
-        let gamma = Uncertain::gamma(2.0, 1.0);
+        let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
 
         group.bench_function(format!("gamma_sequential_{}", count), |b| {
             b.iter(|| black_box(gamma.take_samples(count)));
@@ -326,7 +326,7 @@ fn benchmark_parallel_sampling(c: &mut Criterion) {
             b.iter_with_setup(
                 || {
                     cache::clear_global_caches();
-                    Uncertain::gamma(2.0, 1.0)
+                    Uncertain::gamma(2.0, 1.0).unwrap()
                 },
                 |dist| black_box(dist.take_samples_cached(count)),
             );
@@ -336,14 +336,14 @@ fn benchmark_parallel_sampling(c: &mut Criterion) {
             b.iter_with_setup(
                 || {
                     cache::clear_global_caches();
-                    Uncertain::gamma(2.0, 1.0)
+                    Uncertain::gamma(2.0, 1.0).unwrap()
                 },
                 |dist| black_box(dist.take_samples_cached_par(count)),
             );
         });
     }
 
-    let base = Uncertain::normal(50.0, 10.0);
+    let base = Uncertain::normal(50.0, 10.0).unwrap();
     let transformed = base
         .map(|x| x.powi(2))
         .map(|x| x.sqrt())

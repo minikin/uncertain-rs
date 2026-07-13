@@ -161,7 +161,6 @@ where
 pub struct StatisticsCache {
     expected_value: TtlCache<(uuid::Uuid, usize), f64>,
     variance: TtlCache<(uuid::Uuid, usize), f64>,
-    std_dev: TtlCache<(uuid::Uuid, usize), f64>,
     skewness: TtlCache<(uuid::Uuid, usize), f64>,
     kurtosis: TtlCache<(uuid::Uuid, usize), f64>,
     confidence_intervals: TtlCache<(uuid::Uuid, usize, u64), (f64, f64)>, // confidence as f64 * 1000 for key
@@ -177,7 +176,6 @@ impl StatisticsCache {
         Self {
             expected_value: TtlCache::new(ttl),
             variance: TtlCache::new(ttl),
-            std_dev: TtlCache::new(ttl),
             skewness: TtlCache::new(ttl),
             kurtosis: TtlCache::new(ttl),
             confidence_intervals: TtlCache::new(ttl),
@@ -206,14 +204,6 @@ impl StatisticsCache {
         F: FnOnce() -> f64,
     {
         self.variance.get_or_compute((id, sample_count), compute)
-    }
-
-    /// Cache standard deviation computation
-    pub fn get_or_compute_std_dev<F>(&self, id: uuid::Uuid, sample_count: usize, compute: F) -> f64
-    where
-        F: FnOnce() -> f64,
-    {
-        self.std_dev.get_or_compute((id, sample_count), compute)
     }
 
     /// Cache skewness computation
@@ -284,7 +274,6 @@ impl StatisticsCache {
     pub fn clear_all(&self) {
         self.expected_value.clear();
         self.variance.clear();
-        self.std_dev.clear();
         self.skewness.clear();
         self.kurtosis.clear();
         self.confidence_intervals.clear();
@@ -296,7 +285,6 @@ impl StatisticsCache {
     pub fn cleanup_all_expired(&self) {
         self.expected_value.cleanup_expired();
         self.variance.cleanup_expired();
-        self.std_dev.cleanup_expired();
         self.skewness.cleanup_expired();
         self.kurtosis.cleanup_expired();
         self.confidence_intervals.cleanup_expired();
@@ -319,7 +307,6 @@ impl StatisticsCache {
         let stats = [
             self.expected_value.cache_stats(),
             self.variance.cache_stats(),
-            self.std_dev.cache_stats(),
             self.skewness.cache_stats(),
             self.kurtosis.cache_stats(),
             self.confidence_intervals.cache_stats(),
@@ -641,9 +628,6 @@ mod tests {
         assert_eq!(variance, 25.0);
         let variance2 = cache.get_or_compute_variance(test_id, 1000, || 50.0);
         assert_eq!(variance2, 25.0); // Should use cached value
-
-        let std_dev = cache.get_or_compute_std_dev(test_id, 1000, || 5.0);
-        assert_eq!(std_dev, 5.0);
 
         let skewness = cache.get_or_compute_skewness(test_id, 1000, || 0.5);
         assert_eq!(skewness, 0.5);

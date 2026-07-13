@@ -85,7 +85,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let sample = normal.sample();
     /// println!("Sample: {}", sample);
     /// ```
@@ -100,7 +100,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let celsius = Uncertain::normal(20.0, 2.0);
+    /// let celsius = Uncertain::normal(20.0, 2.0).unwrap();
     /// let fahrenheit = celsius.map(|c| c * 9.0/5.0 + 32.0);
     /// ```
     #[must_use]
@@ -119,8 +119,8 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let base = Uncertain::normal(5.0, 1.0);
-    /// let dependent = base.flat_map(|b| Uncertain::normal(b, 0.5));
+    /// let base = Uncertain::normal(5.0, 1.0).unwrap();
+    /// let dependent = base.flat_map(|b| Uncertain::normal(b, 0.5).unwrap());
     /// ```
     #[must_use]
     pub fn flat_map<U, F>(&self, transform: F) -> Uncertain<U>
@@ -142,7 +142,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let positive_only = normal.filter(|&x| x > 0.0);
     /// ```
     #[must_use]
@@ -167,7 +167,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let first_10: Vec<f64> = normal.samples().take(10).collect();
     /// ```
     #[must_use = "iterators are lazy and do nothing unless consumed"]
@@ -181,7 +181,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let uniform = Uncertain::uniform(0.0, 1.0);
+    /// let uniform = Uncertain::uniform(0.0, 1.0).unwrap();
     /// let samples = uniform.take_samples(1000);
     /// ```
     #[must_use]
@@ -205,7 +205,7 @@ where
     /// ```rust,ignore
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let samples = normal.take_samples_par(10_000);
     /// ```
     ///
@@ -235,7 +235,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let gamma = Uncertain::gamma(2.0, 1.0);
+    /// let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
     /// let samples = gamma.take_samples_cached(1000); // Cached for reuse
     /// ```
     #[must_use]
@@ -259,7 +259,7 @@ impl Uncertain<f64> {
     /// ```rust,ignore
     /// use uncertain_rs::Uncertain;
     ///
-    /// let gamma = Uncertain::gamma(2.0, 1.0);
+    /// let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
     /// let samples = gamma.take_samples_cached_par(10_000); // Generated in parallel, then cached
     /// let same_samples = gamma.take_samples_cached_par(10_000); // Retrieved from cache
     /// ```
@@ -320,7 +320,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let speed = Uncertain::normal(55.2, 5.0);
+    /// let speed = Uncertain::normal(55.2, 5.0).unwrap();
     /// let speeding_evidence = speed.gt(60.0);
     ///
     /// if speeding_evidence.probability_exceeds(0.95) {
@@ -655,7 +655,7 @@ mod tests {
     #[test]
     fn test_readme_example_api() {
         // Test the exact API shown in the README
-        let speed = Uncertain::normal(55.2, 5.0);
+        let speed = Uncertain::normal(55.2, 5.0).unwrap();
         let speeding_evidence = speed.gt(60.0);
 
         // This should compile and work (the exact API from README)

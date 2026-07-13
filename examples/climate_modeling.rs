@@ -10,13 +10,13 @@ fn main() {
     println!("==================================\n");
 
     // Climate model parameters (all uncertain due to model limitations)
-    let baseline_temp = Uncertain::normal(1.1, 0.2); // °C warming since pre-industrial
-    let co2_sensitivity = Uncertain::normal(3.0, 1.0); // °C per CO2 doubling
-    let current_co2 = Uncertain::normal(420.0, 5.0); // ppm ± measurement uncertainty
+    let baseline_temp = Uncertain::normal(1.1, 0.2).unwrap(); // °C warming since pre-industrial
+    let co2_sensitivity = Uncertain::normal(3.0, 1.0).unwrap(); // °C per CO2 doubling
+    let current_co2 = Uncertain::normal(420.0, 5.0).unwrap(); // ppm ± measurement uncertainty
 
     // Future emissions scenarios (highly uncertain)
-    let emission_reduction = Uncertain::uniform(0.2, 0.8); // 20-80% reduction by 2050
-    let _economic_growth = Uncertain::normal(0.025, 0.015); // 2.5% ± 1.5% annual GDP growth
+    let emission_reduction = Uncertain::uniform(0.2, 0.8).unwrap(); // 20-80% reduction by 2050
+    let _economic_growth = Uncertain::normal(0.025, 0.015).unwrap(); // 2.5% ± 1.5% annual GDP growth
 
     println!("🌡️  Current Climate State:");
     println!("   Baseline warming: {:.1}°C ± {:.1}°C", 1.1, 0.2);
@@ -28,7 +28,7 @@ fn main() {
 
     // Project future CO2 concentrations
     let years_ahead = 25.0; // 2050 projection
-    let business_as_usual_growth = Uncertain::normal(0.015, 0.005); // 1.5% annual CO2 growth
+    let business_as_usual_growth = Uncertain::normal(0.015, 0.005).unwrap(); // 1.5% annual CO2 growth
     let reduction_factor = Uncertain::point(1.0) - emission_reduction.clone();
 
     let future_co2_growth = business_as_usual_growth * reduction_factor;
@@ -130,11 +130,11 @@ fn main() {
     println!("\n💰 Economic Impact Assessment:");
 
     // GDP impact from climate change (uncertain relationship)
-    let gdp_impact_per_degree = Uncertain::normal(-0.08, 0.04); // -8% ± 4% per degree
+    let gdp_impact_per_degree = Uncertain::normal(-0.08, 0.04).unwrap(); // -8% ± 4% per degree
     let total_gdp_impact = temperature_increase.clone() * gdp_impact_per_degree;
 
     // Adaptation costs
-    let adaptation_cost_per_slr = Uncertain::normal(2000.0, 500.0); // $2000B ± $500B per meter
+    let adaptation_cost_per_slr = Uncertain::normal(2000.0, 500.0).unwrap(); // $2000B ± $500B per meter
     let adaptation_costs = total_sea_level_rise * adaptation_cost_per_slr;
 
     let gdp_impact_samples: Vec<f64> = total_gdp_impact.take_samples(1000);
@@ -149,8 +149,8 @@ fn main() {
     println!("\n🏛️  Policy Recommendations:");
 
     // Carbon pricing needed
-    let carbon_price_per_ton = Uncertain::normal(100.0, 50.0); // $100 ± $50 per ton CO2
-    let global_emissions = Uncertain::normal(40.0, 5.0); // 40 ± 5 GtCO2/year
+    let carbon_price_per_ton = Uncertain::normal(100.0, 50.0).unwrap(); // $100 ± $50 per ton CO2
+    let global_emissions = Uncertain::normal(40.0, 5.0).unwrap(); // 40 ± 5 GtCO2/year
     let required_reduction = emission_reduction.clone() * global_emissions;
     let carbon_tax_revenue = required_reduction * carbon_price_per_ton;
 
@@ -165,7 +165,7 @@ fn main() {
 
     // Renewable energy investment
     let renewable_capacity_needed = emission_reduction.map(|r| r * 10000.0); // GW capacity
-    let cost_per_gw = Uncertain::normal(1.5, 0.3); // $1.5B ± $0.3B per GW
+    let cost_per_gw = Uncertain::normal(1.5, 0.3).unwrap(); // $1.5B ± $0.3B per GW
     let renewable_investment = renewable_capacity_needed * cost_per_gw;
 
     let investment_samples: Vec<f64> = renewable_investment.take_samples(1000);

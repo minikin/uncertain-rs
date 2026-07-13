@@ -15,6 +15,7 @@ library for real-world scenarios involving uncertainty quantification and error 
     - [Medical Diagnosis (`medical_diagnosis.rs`)](#medical-diagnosis-medical_diagnosisrs)
     - [Climate Modeling (`climate_modeling.rs`)](#climate-modeling-climate_modelingrs)
     - [Sensor Processing (`sensor_processing.rs`)](#sensor-processing-sensor_processingrs)
+    - [Error Handling (`error_handling.rs`)](#error-handling-error_handlingrs)
 
 ## Key Concepts Demonstrated
 
@@ -233,4 +234,36 @@ sensor fusion, and system reliability assessment.
          - Implement redundant sensor deployment
          - Increase monitoring frequency
          - Review maintenance procedures
+```
+
+### Error Handling (`error_handling.rs`)
+
+**Purpose**: Demonstrates the three common patterns for handling the `Result` returned by
+every distribution constructor: unwrapping known-valid literals, matching on specific
+`UncertainError` variants, and propagating errors with `?` from a config-driven builder.
+
+**Key Features**:
+
+- `.unwrap()` for compile-time-known-valid parameters
+- Matching on `NonFiniteParameter` vs. `InvalidParameter`
+- Propagating validation errors with `?` from a function that builds a distribution from
+  untrusted input
+
+**Sample Output**:
+
+```bash
+⚠️  Error Handling with Validated Constructors
+==============================================
+
+1. Known-valid parameters (`.unwrap()`):
+   GPS speed reading: 64.8 mph
+
+2. Matching on error variants:
+   normal(0, 1) -> Ok
+   normal(0, -1) -> invalid 'std_dev' = -1 (must be non-negative)
+   normal(NaN, 1) -> non-finite 'mean': NaN
+
+🏗️  Building a sensor model from untrusted config:
+   ✅ Built sensor model, sampled mean ≈ 72.07
+   ❌ Failed to build sensor model: Invalid parameter 'std_dev': value -2.5 must be non-negative
 ```

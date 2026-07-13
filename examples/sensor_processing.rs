@@ -186,20 +186,20 @@ fn process_sensor_data_robust(
         let result = match (&reading.status, reading.value, reading.uncertainty) {
             // Healthy sensors: use as-is
             (SensorStatus::Healthy, Some(value), Some(uncertainty)) => {
-                Ok(Uncertain::normal(value, uncertainty))
+                Ok(Uncertain::normal(value, uncertainty).unwrap())
             }
 
             // Degraded sensors: increase uncertainty
             (SensorStatus::Degraded, Some(value), Some(uncertainty)) => {
                 let degraded_uncertainty = uncertainty * 2.0; // Double uncertainty for degraded sensors
-                Ok(Uncertain::normal(value, degraded_uncertainty))
+                Ok(Uncertain::normal(value, degraded_uncertainty).unwrap())
             }
 
             // Out-of-range sensors: try to salvage with high uncertainty
             (SensorStatus::OutOfRange, Some(value), _) => {
                 if is_physically_plausible(id, value) {
                     // Use reading but with very high uncertainty
-                    Ok(Uncertain::normal(value, 10.0))
+                    Ok(Uncertain::normal(value, 10.0).unwrap())
                 } else {
                     Err(format!(
                         "Sensor {id} reading {value} is physically implausible"
@@ -211,7 +211,7 @@ fn process_sensor_data_robust(
             (SensorStatus::CalibrationDrift, Some(value), Some(uncertainty)) => {
                 let corrected_value = apply_calibration_correction(id, value);
                 let drift_uncertainty = uncertainty * 1.5 + 2.0; // Account for correction uncertainty
-                Ok(Uncertain::normal(corrected_value, drift_uncertainty))
+                Ok(Uncertain::normal(corrected_value, drift_uncertainty).unwrap())
             }
 
             // Failed or communication error sensors
@@ -443,7 +443,7 @@ fn demonstrate_fallback_strategies(sensors: &HashMap<String, SensorReading>) {
 
     if healthy_temp_count == 0 {
         println!("      🔄 No healthy temperature sensors - using historical model");
-        let historical_temp = Uncertain::normal(22.0, 3.0); // Based on historical data
+        let historical_temp = Uncertain::normal(22.0, 3.0).unwrap(); // Based on historical data
         let samples = historical_temp.take_samples(100);
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
         println!("         Historical estimate: {mean:.1}°C ±3.0 (high uncertainty)");

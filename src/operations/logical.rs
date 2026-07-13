@@ -41,8 +41,8 @@ impl LogicalOps for Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::{Uncertain, operations::LogicalOps};
     ///
-    /// let temp = Uncertain::normal(20.0, 2.0);
-    /// let humidity = Uncertain::normal(50.0, 5.0);
+    /// let temp = Uncertain::normal(20.0, 2.0).unwrap();
+    /// let humidity = Uncertain::normal(50.0, 5.0).unwrap();
     ///
     /// let temp_ok = temp.ge(18.0).and(&temp.le(25.0));
     /// let humidity_ok = humidity.ge(40.0).and(&humidity.le(60.0));
@@ -64,9 +64,9 @@ impl LogicalOps for Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
-    /// let temperature = Uncertain::normal(25.0, 5.0);
+    /// let temperature = Uncertain::normal(25.0, 5.0).unwrap();
     /// let high_temp = Comparison::gt(&temperature, 30.0);
-    /// let humidity = Uncertain::normal(75.0, 10.0);
+    /// let humidity = Uncertain::normal(75.0, 10.0).unwrap();
     /// let high_humidity = Comparison::gt(&humidity, 80.0);
     ///
     /// let uncomfortable = LogicalOps::or(&high_temp, &high_humidity);
@@ -83,7 +83,7 @@ impl LogicalOps for Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::{Uncertain, operations::{LogicalOps, Comparison}};
     ///
-    /// let speed = Uncertain::normal(55.0, 5.0);
+    /// let speed = Uncertain::normal(55.0, 5.0).unwrap();
     /// let speeding = Comparison::gt(&speed, 60.0);
     /// let not_speeding = LogicalOps::not(&speeding);
     /// ```
@@ -118,7 +118,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let condition = Uncertain::bernoulli(0.7);
+    /// let condition = Uncertain::bernoulli(0.7).unwrap();
     /// let result = condition.if_then_else(
     ///     || Uncertain::point(10.0),
     ///     || Uncertain::point(5.0)
@@ -147,8 +147,8 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let raining = Uncertain::bernoulli(0.3);
-    /// let umbrella = Uncertain::bernoulli(0.8);
+    /// let raining = Uncertain::bernoulli(0.3).unwrap();
+    /// let umbrella = Uncertain::bernoulli(0.8).unwrap();
     ///
     /// // If it's raining, then I should have an umbrella
     /// let implication = raining.implies(&umbrella);
@@ -172,7 +172,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let condition = Uncertain::bernoulli(0.7);
+    /// let condition = Uncertain::bernoulli(0.7).unwrap();
     /// let prob = condition.probability(1000);
     /// // Should be approximately 0.7
     /// ```
@@ -256,8 +256,8 @@ mod tests {
 
     #[test]
     fn test_complex_logical_expression() {
-        let temp = Uncertain::normal(22.0, 2.0);
-        let humidity = Uncertain::normal(50.0, 5.0);
+        let temp = Uncertain::normal(22.0, 2.0).unwrap();
+        let humidity = Uncertain::normal(50.0, 5.0).unwrap();
 
         let temp_ok = temp.within_range(20.0, 25.0);
         let humidity_ok = humidity.within_range(40.0, 60.0);
@@ -275,7 +275,7 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn test_if_then_else() {
-        let condition = Uncertain::bernoulli(0.8);
+        let condition = Uncertain::bernoulli(0.8).unwrap();
         let result = condition.if_then_else(|| Uncertain::point(10.0), || Uncertain::point(5.0));
 
         // Should mostly return 10.0 since probability is 0.8
@@ -288,8 +288,8 @@ mod tests {
 
     #[test]
     fn test_implication() {
-        let raining = Uncertain::bernoulli(0.3);
-        let umbrella = Uncertain::bernoulli(0.9);
+        let raining = Uncertain::bernoulli(0.3).unwrap();
+        let umbrella = Uncertain::bernoulli(0.9).unwrap();
 
         let implication = raining.implies(&umbrella);
 
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn test_shared_variable_semantics() {
         // Test that logical operations work (shared variable semantics need further development)
-        let x = Uncertain::normal(0.0, 1.0);
+        let x = Uncertain::normal(0.0, 1.0).unwrap();
         let above = Comparison::gt(&x, 0.0);
         let below = Comparison::lt(&x, 0.0);
 

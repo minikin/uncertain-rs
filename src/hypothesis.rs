@@ -31,7 +31,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::{Uncertain, operations::Comparison};
     ///
-    /// let speed = Uncertain::normal(55.0, 5.0);
+    /// let speed = Uncertain::normal(55.0, 5.0).unwrap();
     /// let speeding_evidence = Comparison::gt(&speed, 60.0);
     ///
     /// // Only issue ticket if 95% confident speeding
@@ -50,7 +50,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let condition = Uncertain::bernoulli(0.7);
+    /// let condition = Uncertain::bernoulli(0.7).unwrap();
     /// let confident = condition.probability_exceeds_with_params(0.6, 0.99, 5000);
     /// ```
     #[must_use]
@@ -81,7 +81,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::{Uncertain, operations::Comparison};
     ///
-    /// let measurement = Uncertain::normal(10.0, 2.0);
+    /// let measurement = Uncertain::normal(10.0, 2.0).unwrap();
     /// let above_threshold = Comparison::gt(&measurement, 8.0);
     ///
     /// if above_threshold.implicit_conditional() {
@@ -114,7 +114,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let biased_coin = Uncertain::bernoulli(0.7);
+    /// let biased_coin = Uncertain::bernoulli(0.7).unwrap();
     /// let result = biased_coin.evaluate_hypothesis(
     ///     0.6,      // threshold
     ///     0.95,     // confidence_level
@@ -215,7 +215,7 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let condition = Uncertain::bernoulli(0.7);
+    /// let condition = Uncertain::bernoulli(0.7).unwrap();
     /// let prob = condition.estimate_probability(1000);
     /// // Should be approximately 0.7
     /// ```
@@ -244,8 +244,8 @@ impl Uncertain<bool> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let disease = Uncertain::bernoulli(0.01); // 1% base rate
-    /// let test_positive = Uncertain::bernoulli(0.95); // Test result
+    /// let disease = Uncertain::bernoulli(0.01).unwrap(); // 1% base rate
+    /// let test_positive = Uncertain::bernoulli(0.95).unwrap(); // Test result
     ///
     /// let posterior = Uncertain::bayesian_update(
     ///     0.01, // prior probability
@@ -297,7 +297,7 @@ impl MultipleHypothesisTester {
     /// ```rust
     /// use uncertain_rs::{Uncertain, hypothesis::MultipleHypothesisTester, operations::Comparison};
     ///
-    /// let temp = Uncertain::normal(22.0, 2.0);
+    /// let temp = Uncertain::normal(22.0, 2.0).unwrap();
     /// let hypotheses = vec![
     ///     Comparison::gt(&temp, 20.0),
     ///     Comparison::gt(&temp, 25.0),
@@ -388,8 +388,8 @@ mod tests {
 
     #[test]
     fn test_implicit_conditional() {
-        let likely_true = Uncertain::bernoulli(0.8);
-        let likely_false = Uncertain::bernoulli(0.2);
+        let likely_true = Uncertain::bernoulli(0.8).unwrap();
+        let likely_false = Uncertain::bernoulli(0.2).unwrap();
 
         // These are probabilistic, so we test multiple times
         let mut true_count = 0;
@@ -410,7 +410,7 @@ mod tests {
 
     #[test]
     fn test_hypothesis_testing_with_known_probability() {
-        let biased_coin = Uncertain::bernoulli(0.7);
+        let biased_coin = Uncertain::bernoulli(0.7).unwrap();
 
         // Test exceeds 0.6 (should be true)
         let result1 = biased_coin.evaluate_hypothesis(0.6, 0.95, 5000, None, None, None, 20);
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn test_evidence_based_conditionals() {
-        let speed = Uncertain::normal(55.0, 5.0);
+        let speed = Uncertain::normal(55.0, 5.0).unwrap();
         let speeding_evidence = Comparison::gt(&speed, 60.0);
 
         // With mean=55, std=5, P(X > 60) should be relatively low
@@ -446,7 +446,7 @@ mod tests {
 
     #[test]
     fn test_bayesian_update() {
-        let test_positive = Uncertain::bernoulli(0.95);
+        let test_positive = Uncertain::bernoulli(0.95).unwrap();
 
         let posterior = Uncertain::bayesian_update(
             0.01, // prior: 1% disease rate
@@ -461,7 +461,7 @@ mod tests {
     }
     #[test]
     fn test_multiple_hypothesis_testing() {
-        let temp = Uncertain::normal(22.0, 2.0);
+        let temp = Uncertain::normal(22.0, 2.0).unwrap();
         let hypotheses = vec![
             Comparison::gt(&temp, 20.0), // Should be likely true
             Comparison::gt(&temp, 30.0), // Should be false
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_find_most_likely() {
-        let temp = Uncertain::normal(22.0, 1.0);
+        let temp = Uncertain::normal(22.0, 1.0).unwrap();
         let hypotheses = vec![
             Comparison::gt(&temp, 25.0), // Unlikely
             Comparison::gt(&temp, 20.0), // Very likely

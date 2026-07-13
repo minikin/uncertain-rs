@@ -35,17 +35,17 @@ fn main() {
     // Patient symptoms and test results (all have measurement uncertainty)
 
     // Blood pressure reading (systolic)
-    let blood_pressure = Uncertain::normal(145.0, 8.0); // mmHg ± measurement error
+    let blood_pressure = Uncertain::normal(145.0, 8.0).unwrap(); // mmHg ± measurement error
 
     // Cholesterol test result
-    let cholesterol = Uncertain::normal(220.0, 15.0); // mg/dL ± lab uncertainty
+    let cholesterol = Uncertain::normal(220.0, 15.0).unwrap(); // mg/dL ± lab uncertainty
 
     // Blood sugar (glucose) level
-    let glucose = Uncertain::normal(126.0, 12.0); // mg/dL ± measurement variance
+    let glucose = Uncertain::normal(126.0, 12.0).unwrap(); // mg/dL ± measurement variance
 
     // BMI calculation with uncertain measurements
-    let weight_kg = Uncertain::normal(78.5, 1.2); // kg ± scale uncertainty
-    let height_m = Uncertain::normal(1.75, 0.02); // m ± measurement error
+    let weight_kg = Uncertain::normal(78.5, 1.2).unwrap(); // kg ± scale uncertainty
+    let height_m = Uncertain::normal(1.75, 0.02).unwrap(); // m ± measurement error
     let bmi = weight_kg / (height_m.clone() * height_m);
 
     println!("📊 Patient Measurements:");

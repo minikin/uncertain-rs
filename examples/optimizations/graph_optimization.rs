@@ -8,9 +8,9 @@ fn main() {
     println!("=========================\n");
 
     // Create a complex expression with multiple optimization opportunities
-    let x = Uncertain::normal(2.0, 0.1);
-    let y = Uncertain::normal(3.0, 0.1);
-    let z = Uncertain::normal(1.0, 0.1);
+    let x = Uncertain::normal(2.0, 0.1).unwrap();
+    let y = Uncertain::normal(3.0, 0.1).unwrap();
+    let z = Uncertain::normal(1.0, 0.1).unwrap();
 
     // Expression: (x + y) * (x + y) + (x + y) * z + (x + 0) * 1
     // This has:

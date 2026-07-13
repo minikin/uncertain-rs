@@ -10,8 +10,8 @@ fn main() {
     println!("===========================================\n");
 
     // GPS position has uncertainty due to satellite positioning errors
-    let current_lat = Uncertain::normal(37.7749, 0.0001); // San Francisco
-    let current_lon = Uncertain::normal(-122.4194, 0.0001);
+    let current_lat = Uncertain::normal(37.7749, 0.0001).unwrap(); // San Francisco
+    let current_lon = Uncertain::normal(-122.4194, 0.0001).unwrap();
 
     let destination_lat = Uncertain::point(37.7849); // 1 mile north
     let destination_lon = Uncertain::point(-122.4094); // 1 mile east
@@ -43,8 +43,8 @@ fn main() {
     );
 
     // Speed varies due to traffic, weather, driver behavior
-    let base_speed = Uncertain::normal(35.0, 8.0); // mph, with uncertainty
-    let traffic_factor = Uncertain::uniform(0.6, 1.0); // Traffic slows us down
+    let base_speed = Uncertain::normal(35.0, 8.0).unwrap(); // mph, with uncertainty
+    let traffic_factor = Uncertain::uniform(0.6, 1.0).unwrap(); // Traffic slows us down
     let actual_speed = base_speed * traffic_factor;
 
     // Calculate arrival time
@@ -82,7 +82,7 @@ fn main() {
 
     // Alternative route: longer but more predictable
     let alt_distance = Uncertain::point(2.2); // Slightly longer
-    let alt_speed = Uncertain::normal(45.0, 3.0); // Highway, more predictable
+    let alt_speed = Uncertain::normal(45.0, 3.0).unwrap(); // Highway, more predictable
     let alt_time = alt_distance / alt_speed * Uncertain::point(60.0);
 
     // Compare routes using evidence-based reasoning
@@ -109,7 +109,7 @@ fn main() {
 
     // Fuel consumption analysis
     println!("\n⛽ Fuel Consumption Analysis:");
-    let fuel_efficiency = Uncertain::normal(28.0, 4.0); // mpg
+    let fuel_efficiency = Uncertain::normal(28.0, 4.0).unwrap(); // mpg
     let fuel_needed = distance / fuel_efficiency;
 
     let fuel_samples: Vec<f64> = fuel_needed.take_samples(1000);
@@ -118,7 +118,7 @@ fn main() {
     println!("   Expected fuel: {mean_fuel:.3} gallons");
 
     // Check if we have enough fuel
-    let current_fuel = Uncertain::uniform(0.8, 1.2); // Uncertain fuel gauge reading
+    let current_fuel = Uncertain::uniform(0.8, 1.2).unwrap(); // Uncertain fuel gauge reading
     let enough_fuel = current_fuel.greater_than(&fuel_needed);
     let fuel_confidence = enough_fuel
         .take_samples(1000)

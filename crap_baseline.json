@@ -896,43 +896,43 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::bernoulli",
-      "line": 350,
-      "cyclomatic": 1.0,
+      "line": 439,
+      "cyclomatic": 2.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 2.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::beta",
-      "line": 275,
-      "cyclomatic": 1.0,
+      "line": 350,
+      "cyclomatic": 3.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 3.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::binomial",
-      "line": 380,
-      "cyclomatic": 1.0,
+      "line": 472,
+      "cyclomatic": 2.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 2.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::categorical",
-      "line": 159,
+      "line": 206,
       "cyclomatic": 3.0,
-      "coverage": 70.83333333333334,
-      "crap": 3.2233072916666665,
+      "coverage": 94.44444444444444,
+      "crap": 3.001543209876543,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::empirical",
-      "line": 116,
+      "line": 168,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -941,16 +941,25 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::exponential",
-      "line": 240,
-      "cyclomatic": 1.0,
+      "line": 308,
+      "cyclomatic": 2.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 2.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::gamma",
-      "line": 305,
+      "line": 386,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "Uncertain::gamma_unchecked",
+      "line": 392,
       "cyclomatic": 1.0,
       "coverage": 80.95238095238095,
       "crap": 1.0069107007882518,
@@ -959,25 +968,25 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::geometric",
-      "line": 435,
-      "cyclomatic": 1.0,
+      "line": 535,
+      "cyclomatic": 2.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 2.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::log_normal",
-      "line": 257,
-      "cyclomatic": 1.0,
+      "line": 329,
+      "cyclomatic": 3.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 3.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::mixture",
-      "line": 55,
+      "line": 111,
       "cyclomatic": 6.0,
       "coverage": 96.96969696969697,
       "crap": 6.001001753067869,
@@ -986,7 +995,16 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::normal",
-      "line": 205,
+      "line": 249,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "Uncertain::normal_unchecked",
+      "line": 255,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -995,7 +1013,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::point",
-      "line": 26,
+      "line": 86,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -1004,19 +1022,64 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::poisson",
-      "line": 404,
-      "cyclomatic": 1.0,
+      "line": 500,
+      "cyclomatic": 2.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 2.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::uniform",
-      "line": 224,
-      "cyclomatic": 1.0,
+      "line": 281,
+      "cyclomatic": 4.0,
       "coverage": 100.0,
-      "crap": 1.0,
+      "crap": 4.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "validate_finite",
+      "line": 12,
+      "cyclomatic": 2.0,
+      "coverage": 100.0,
+      "crap": 2.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "validate_left_open_unit_interval",
+      "line": 59,
+      "cyclomatic": 4.0,
+      "coverage": 100.0,
+      "crap": 4.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "validate_non_negative",
+      "line": 33,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "validate_positive",
+      "line": 20,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
+      "function": "validate_unit_interval",
+      "line": 46,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
       "crate": "uncertain-rs"
     },
     {
@@ -1913,7 +1976,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::adaptive_lazy_stats",
-      "line": 666,
+      "line": 668,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -1922,7 +1985,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::cdf",
-      "line": 876,
+      "line": 888,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -1940,7 +2003,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::confidence_interval",
-      "line": 842,
+      "line": 846,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -1949,7 +2012,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::correlation",
-      "line": 1051,
+      "line": 1065,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -1976,7 +2039,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::expected_value_adaptive",
-      "line": 629,
+      "line": 631,
       "cyclomatic": 5.0,
       "coverage": 92.85714285714286,
       "crap": 5.009110787172012,
@@ -1994,7 +2057,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::interquartile_range",
-      "line": 954,
+      "line": 968,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2003,7 +2066,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::kurtosis",
-      "line": 790,
+      "line": 794,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2021,7 +2084,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::log_likelihood",
-      "line": 1030,
+      "line": 1044,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -2030,7 +2093,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::median_absolute_deviation",
-      "line": 974,
+      "line": 988,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2048,7 +2111,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::pdf_kde",
-      "line": 1004,
+      "line": 1018,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2066,16 +2129,16 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::quantile",
-      "line": 909,
-      "cyclomatic": 4.0,
-      "coverage": 92.0,
-      "crap": 4.008192,
+      "line": 921,
+      "cyclomatic": 1.0,
+      "coverage": 92.5925925925926,
+      "crap": 1.0004064421074024,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::skewness",
-      "line": 753,
+      "line": 757,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2084,7 +2147,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::standard_deviation",
-      "line": 733,
+      "line": 737,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2102,7 +2165,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/statistics.rs",
       "function": "Uncertain::variance",
-      "line": 690,
+      "line": 692,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
