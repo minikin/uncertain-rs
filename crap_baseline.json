@@ -2164,17 +2164,8 @@
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
-      "function": "Uncertain::eq",
-      "line": 379,
-      "cyclomatic": 1.0,
-      "coverage": 100.0,
-      "crap": 1.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::eq_value",
-      "line": 362,
+      "line": 378,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2183,7 +2174,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::filter",
-      "line": 149,
+      "line": 165,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2192,7 +2183,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::flat_map",
-      "line": 126,
+      "line": 142,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2201,7 +2192,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::fmt",
-      "line": 414,
+      "line": 395,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2210,7 +2201,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::ge",
-      "line": 345,
+      "line": 361,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2219,7 +2210,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::greater_than",
-      "line": 301,
+      "line": 317,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2228,16 +2219,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::gt",
-      "line": 331,
-      "cyclomatic": 1.0,
-      "coverage": 100.0,
-      "crap": 1.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
-      "function": "Uncertain::gt",
-      "line": 403,
+      "line": 347,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2246,7 +2228,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::id",
-      "line": 78,
+      "line": 94,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2255,7 +2237,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::le",
-      "line": 352,
+      "line": 368,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2264,7 +2246,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::less_than",
-      "line": 288,
+      "line": 304,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2273,16 +2255,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::lt",
-      "line": 338,
-      "cyclomatic": 1.0,
-      "coverage": 100.0,
-      "crap": 1.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
-      "function": "Uncertain::lt",
-      "line": 397,
+      "line": 354,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2291,7 +2264,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::map",
-      "line": 107,
+      "line": 123,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2300,7 +2273,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::ne_value",
-      "line": 369,
+      "line": 385,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2309,16 +2282,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::new",
-      "line": 37,
-      "cyclomatic": 1.0,
-      "coverage": 100.0,
-      "crap": 1.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
-      "function": "Uncertain::partial_cmp",
-      "line": 391,
+      "line": 53,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2327,7 +2291,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::sample",
-      "line": 93,
+      "line": 109,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2336,7 +2300,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::samples",
-      "line": 174,
+      "line": 190,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2345,7 +2309,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples",
-      "line": 188,
+      "line": 204,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2354,7 +2318,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_cached",
-      "line": 242,
+      "line": 258,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2363,7 +2327,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_cached_par",
-      "line": 274,
+      "line": 290,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2372,7 +2336,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_par",
-      "line": 219,
+      "line": 235,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2381,7 +2345,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::with_node",
-      "line": 56,
+      "line": 72,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,

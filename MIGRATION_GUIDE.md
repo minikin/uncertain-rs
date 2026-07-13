@@ -1,5 +1,44 @@
 # Migration Guide: 0.2.x → 0.3.0
 
+## `Uncertain<T>` no longer implements `PartialEq`/`PartialOrd`
+
+`a == b`, `a < b`, `a.partial_cmp(&b)` on two `Uncertain<T>` values no longer compile.
+
+### Why
+
+The removed impls drew one fresh sample from each side and compared those samples —
+which isn't a meaningful fact about a *distribution*, and silently broke the contract
+both traits promise: `a == a` could evaluate to `false`, and repeated comparisons of the
+same pair could disagree with each other from one call to the next.
+
+### How to update
+
+Use the evidence-based comparison API instead — it returns `Uncertain<bool>` (evidence
+built from independent samples) rather than a single-draw `bool`/`Ordering`, and pairs
+with `probability_exceeds` to turn that evidence into a decision:
+
+```rust
+// Before (0.2.x) — compiled, but silently unsound
+// if a < b { ... }
+
+// After (0.3.0)
+use uncertain_rs::Uncertain;
+let a = Uncertain::normal(10.0, 1.0).unwrap();
+let b = Uncertain::normal(12.0, 1.0).unwrap();
+let evidence = a.lt_uncertain(&b);
+if evidence.probability_exceeds(0.95) {
+    // 95%+ confident a < b
+}
+```
+
+For comparing against a fixed scalar threshold, use `a.gt(threshold)` / `a.lt(threshold)`
+/ `a.eq_value(threshold)`, etc. (already available since 0.2.0, unaffected by this change).
+
+If you genuinely want a single fresh sample from each side compared directly — rare, and
+usually a sign you want the evidence-based API above instead — do it explicitly:
+`a.sample() == b.sample()`, which makes the single-draw, non-reproducible nature of the
+comparison visible at the call site instead of hiding behind `==`.
+
 ## Distribution constructors now return `Result`
 
 Every distribution constructor validates its parameters and returns
