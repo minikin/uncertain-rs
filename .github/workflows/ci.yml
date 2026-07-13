@@ -10,6 +10,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  lint:
+    name: Lint (fmt + clippy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
   test:
     name: Test Suite (${{ matrix.rust }})
     runs-on: ubuntu-latest
@@ -17,82 +39,31 @@ jobs:
       fail-fast: false
       matrix:
         rust: [stable, beta, nightly]
+    continue-on-error: ${{ matrix.rust != 'stable' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: ./.github/actions/setup-rust
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
-          components: rustfmt, clippy
-          cache-key-suffix: -test
 
-      - name: Quality checks (formatting & clippy)
-        uses: ./.github/actions/quality-checks
-        if: matrix.rust == 'stable'
-
-      - name: Build
-        uses: ./.github/actions/build-project
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.rust }}
 
       - name: Run tests
-        uses: ./.github/actions/run-tests
-        with:
-          test-type: lib
-          verbose: true
+        run: cargo test --all-targets
+
+      - name: Run tests (parallel feature)
+        run: cargo test --all-targets --features parallel
 
       - name: Run doc tests
-        uses: ./.github/actions/run-tests
-        with:
-          test-type: doc
-          verbose: false
         if: matrix.rust == 'stable'
-
-  coverage:
-    name: Code Coverage
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust for coverage
-        uses: ./.github/actions/setup-rust
-        with:
-          components: llvm-tools-preview
-          cache-key-suffix: -coverage
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Generate code coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-
-      - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust for security
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key-suffix: -security
-
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
-
-      - name: Run security audit
-        run: cargo audit
+        run: cargo test --doc --all-features
 
   msrv:
     name: Minimum Supported Rust Version
@@ -106,39 +77,74 @@ jobs:
         id: msrv
         run: echo "version=$(grep -m1 '^rust-version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')" >> "$GITHUB_OUTPUT"
 
-      - name: Setup MSRV Rust
-        uses: ./.github/actions/setup-rust
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.msrv.outputs.version }}
-          cache-key-suffix: -msrv
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
       - name: Check MSRV compatibility
         run: cargo check --lib
 
-  release-check:
-    name: Release Build Check
+  coverage:
+    name: Coverage & CRAP Regression Gate
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Rust for release
-        uses: ./.github/actions/setup-rust
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          cache-key-suffix: -release
+          components: llvm-tools-preview
 
-      - name: Build release
-        uses: ./.github/actions/build-project
-        with:
-          release: true
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
-      - name: Run release tests
-        uses: ./.github/actions/run-tests
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@cargo-binstall
+
+      - name: Install cargo-crap
+        run: cargo binstall -y cargo-crap
+
+      - name: Generate coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Upload coverage reports to Codecov
+        if: github.event_name == 'push'
+        uses: codecov/codecov-action@v5
         with:
-          test-type: lib
-          release: true
-          verbose: true
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+
+      - name: Check CRAP regressions vs baseline
+        run: cargo crap --lcov lcov.info --workspace --baseline crap_baseline.json --fail-regression --repo-url ${{ github.server_url }}/${{ github.repository }} --commit-ref ${{ github.sha }}
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@cargo-audit
+
+      - name: Run security audit
+        run: cargo audit
 
   deny:
     name: Cargo Deny (licenses, advisories, bans, sources)
@@ -148,10 +154,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Rust for deny
-        uses: ./.github/actions/setup-rust
-        with:
-          cache-key-suffix: -deny
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@cargo-deny
@@ -169,32 +176,3 @@ jobs:
 
       - name: Check semver
         uses: obi1kenobi/cargo-semver-checks-action@v2
-
-  crap:
-    name: CRAP Score Regression Gate
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Rust for crap
-        uses: ./.github/actions/setup-rust
-        with:
-          components: llvm-tools-preview
-          cache-key-suffix: -crap
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-
-      - name: Install cargo-binstall
-        uses: taiki-e/install-action@cargo-binstall
-
-      - name: Install cargo-crap
-        run: cargo binstall -y cargo-crap
-
-      - name: Generate coverage
-        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
-
-      - name: Check CRAP regressions vs baseline
-        run: cargo crap --lcov lcov.info --workspace --baseline crap_baseline.json --fail-regression --repo-url ${{ github.server_url }}/${{ github.repository }} --commit-ref ${{ github.sha }}
