@@ -2,6 +2,7 @@
 name = "uncertain-rs"
 version = "0.2.0"
 edition = "2024"
+rust-version = "1.88.0"
 authors = ["Oleksandr Prokhorenko <warbles.lieu_04@icloud.com>"]
 license = "MIT"
 description = "A Rust library for uncertainty-aware programming, implementing the approach from 'Uncertain<T>: A First-Order Type for Uncertain Data'"
@@ -9,6 +10,12 @@ homepage = "https://github.com/minikin/uncertain-rs"
 repository = "https://github.com/minikin/uncertain-rs"
 keywords = ["uncertainty", "probability", "statistics", "monte-carlo", "sprt"]
 categories = ["science", "algorithms", "mathematics"]
+
+[lints.clippy]
+# Pedantic/nursery stay opt-in (see .cargo/config.toml aliases) until
+# specs/17-clippy-pedantic-cleanup.md — turning them on here fails CI on
+# ~150 pre-existing findings out of this spec's scope.
+all = { level = "warn", priority = -1 }
 
 [dependencies]
 rand = "0.10.0"

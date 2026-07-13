@@ -709,10 +709,8 @@ impl GraphOptimizer {
                     ..
                 },
                 right,
-            ) => {
-                if Self::is_constant_zero(left_sample) {
-                    return Some(right.clone());
-                }
+            ) if Self::is_constant_zero(left_sample) => {
+                return Some(right.clone());
             }
             _ => {}
         }
@@ -771,10 +769,8 @@ impl GraphOptimizer {
                     ..
                 },
                 _right,
-            ) => {
-                if Self::is_constant_zero(left_sample) {
-                    return Some(ComputationNode::leaf(|| T::zero()));
-                }
+            ) if Self::is_constant_zero(left_sample) => {
+                return Some(ComputationNode::leaf(|| T::zero()));
             }
             _ => {}
         }
@@ -800,10 +796,8 @@ impl GraphOptimizer {
                     ..
                 },
                 right,
-            ) => {
-                if Self::is_constant_one(left_sample) {
-                    return Some(right.clone());
-                }
+            ) if Self::is_constant_one(left_sample) => {
+                return Some(right.clone());
             }
             _ => {}
         }

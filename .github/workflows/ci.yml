@@ -8,7 +8,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  MSRV: "1.88.0"
 
 jobs:
   test:
@@ -103,10 +102,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Read MSRV from Cargo.toml
+        id: msrv
+        run: echo "version=$(grep -m1 '^rust-version' Cargo.toml | sed -E 's/.*"(.*)".*/\1/')" >> "$GITHUB_OUTPUT"
+
       - name: Setup MSRV Rust
         uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ env.MSRV }}
+          toolchain: ${{ steps.msrv.outputs.version }}
           cache-key-suffix: -msrv
 
       - name: Check MSRV compatibility
@@ -136,3 +139,54 @@ jobs:
           test-type: lib
           release: true
           verbose: true
+
+  deny:
+    name: Cargo Deny (licenses, advisories, bans, sources)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+
+  semver:
+    name: SemVer Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check semver
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+
+  crap:
+    name: CRAP Score Regression Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust for crap
+        uses: ./.github/actions/setup-rust
+        with:
+          components: llvm-tools-preview
+          cache-key-suffix: -crap
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+
+      - name: Install cargo-binstall
+        uses: taiki-e/install-action@cargo-binstall
+
+      - name: Install cargo-crap
+        run: cargo binstall -y cargo-crap
+
+      - name: Generate coverage
+        run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
+
+      - name: Check CRAP regressions vs baseline
+        run: cargo crap --lcov lcov.info --workspace --baseline crap_baseline.json --fail-regression --repo-url ${{ github.server_url }}/${{ github.repository }} --commit-ref ${{ github.sha }}

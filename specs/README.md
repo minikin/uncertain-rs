@@ -9,7 +9,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 
 | #  | Spec | Priority | Effort | Breaking | Status |
 |----|------|----------|--------|----------|--------|
-| 01 | [Dev-workflow hardening](01-dev-workflow-hardening.md) | P0 | Medium | no | Pending |
+| 01 | [Dev-workflow hardening](01-dev-workflow-hardening.md) | P0 | Medium | no | Implemented |
 | 02 | [Validated constructors](02-validated-constructors.md) | P0 | High | **yes** | Pending |
 | 03 | [Remove sampling-based Eq/Ord](03-remove-sampling-eq.md) | P0 | Low | **yes** | Pending |
 | 04 | [Seedable RNG & reproducibility](04-seedable-rng.md) | P0 | High | no | Pending |
@@ -25,15 +25,20 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 | 14 | [Benchmarks & coverage gates in CI](14-bench-regression-ci.md) | P1 | Medium | no | Pending |
 | 15 | [Docs & meta cleanup](15-docs-and-meta.md) | P1 | Low | no | Pending |
 | 16 | [Release automation](16-release-automation.md) | P2 | Low | no | Pending |
+| 17 | [Clippy pedantic/nursery cleanup](17-clippy-pedantic-cleanup.md) | P2 | Medium | no | Pending |
 
 ## Suggested order
 
 1. **01** first — it installs the quality gates every later spec is verified against.
+   *(Implemented; see the spec for two deliberate deviations from the original draft:
+   pedantic/nursery lints stay opt-in — split out as Spec 17 — and cargo-crap uses a
+   regression gate against a committed baseline rather than an absolute threshold, since
+   9 functions already exceed it today.)*
 2. **04 → 05** (seeding, then correct samplers) — reproducibility unblocks deflaked tests
    used by every other spec.
 3. **02, 03, 06** — the breaking API changes, batched into one 0.3.0 release.
 4. **07 → 08** — optimizer correctness before optimizer effectiveness.
-5. **09, 10, 11, 14, 15** in any order.
+5. **09, 10, 11, 14, 15, 17** in any order.
 6. **12, 13, 16** — feature/polish tail.
 
 ## Spec format
