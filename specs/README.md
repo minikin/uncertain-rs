@@ -11,7 +11,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 |----|------|----------|--------|----------|--------|
 | 01 | [Dev-workflow hardening](01-dev-workflow-hardening.md) | P0 | Medium | no | Implemented |
 | 02 | [Validated constructors](02-validated-constructors.md) | P0 | High | **yes** | Implemented |
-| 03 | [Remove sampling-based Eq/Ord](03-remove-sampling-eq.md) | P0 | Low | **yes** | Pending |
+| 03 | [Remove sampling-based Eq/Ord](03-remove-sampling-eq.md) | P0 | Low | **yes** | Implemented |
 | 04 | [Seedable RNG & reproducibility](04-seedable-rng.md) | P0 | High | no | Pending |
 | 05 | [Correct sampling via rand_distr](05-rand-distr-sampling.md) | P0 | Medium | no | Pending |
 | 06 | [Total graph evaluation](06-total-graph-evaluation.md) | P0 | Medium | **yes** | Pending |

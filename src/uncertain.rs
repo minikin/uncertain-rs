@@ -9,6 +9,22 @@ use std::sync::Arc;
 /// `Uncertain` provides a way to work with probabilistic values
 /// by representing them as sampling functions with a computation graph
 /// for lazy evaluation and proper uncertainty-aware conditionals.
+///
+/// `Uncertain<T>` intentionally does not implement `PartialEq`/`PartialOrd`: a
+/// single-sample comparison isn't a meaningful fact about a distribution, and an
+/// impl that drew a fresh sample per call would silently violate reflexivity
+/// (`a == a` could be `false`). Use the evidence-based [`Comparison`](crate::operations::Comparison)
+/// trait instead (`value.gt(threshold)`, `a.gt_uncertain(&b)`, etc.), which returns
+/// `Uncertain<bool>` and is paired with [`probability_exceeds`](Uncertain::probability_exceeds)
+/// for turning evidence into a decision.
+///
+/// ```compile_fail
+/// use uncertain_rs::Uncertain;
+///
+/// let a = Uncertain::point(1.0);
+/// let b = Uncertain::point(2.0);
+/// let _ = a == b; // does not compile: no PartialEq impl
+/// ```
 #[derive(Clone)]
 pub struct Uncertain<T> {
     /// Unique identifier for caching purposes
@@ -372,41 +388,6 @@ where
     }
 }
 
-impl<T> std::cmp::PartialEq for Uncertain<T>
-where
-    T: Shareable + PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        // This is a fallback for direct equality testing
-        let sample_a = self.sample();
-        let sample_b = other.sample();
-        sample_a == sample_b
-    }
-}
-
-impl<T> std::cmp::PartialOrd for Uncertain<T>
-where
-    T: Shareable + PartialOrd,
-{
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let sample_a = self.sample();
-        let sample_b = other.sample();
-        sample_a.partial_cmp(&sample_b)
-    }
-
-    fn lt(&self, other: &Self) -> bool {
-        let sample_a = self.sample();
-        let sample_b = other.sample();
-        sample_a < sample_b
-    }
-
-    fn gt(&self, other: &Self) -> bool {
-        let sample_a = self.sample();
-        let sample_b = other.sample();
-        sample_a > sample_b
-    }
-}
-
 impl<T> std::fmt::Debug for Uncertain<T>
 where
     T: Shareable + std::fmt::Debug,
@@ -573,50 +554,6 @@ mod tests {
         let larger = Uncertain::new(|| 2.0);
         let comparison = smaller.greater_than(&larger);
         assert!(!comparison.sample());
-    }
-
-    #[test]
-    fn test_partial_eq() {
-        let a = Uncertain::new(|| 5.0);
-        let b = Uncertain::new(|| 5.0);
-        let c = Uncertain::new(|| 10.0);
-
-        assert_eq!(a, b);
-        assert_ne!(a, c);
-    }
-
-    #[test]
-    fn test_partial_ord() {
-        let smaller = Uncertain::new(|| 1.0);
-        let larger = Uncertain::new(|| 2.0);
-
-        assert!(smaller < larger);
-        assert!(larger > smaller);
-        assert!(smaller.partial_cmp(&larger).is_some());
-    }
-
-    #[test]
-    fn test_partial_ord_equal() {
-        let a = Uncertain::new(|| 5.0);
-        let b = Uncertain::new(|| 5.0);
-
-        assert!(a.partial_cmp(&b).is_some());
-        assert!(b.partial_cmp(&a).is_some());
-    }
-
-    #[test]
-    fn test_partial_ord_lt_gt_boundary() {
-        let a = Uncertain::point(5.0);
-        let b = Uncertain::point(5.0);
-        let smaller = Uncertain::point(3.0);
-        let larger = Uncertain::point(7.0);
-
-        assert!(!PartialOrd::lt(&a, &b));
-        assert!(!PartialOrd::gt(&a, &b));
-        assert!(PartialOrd::lt(&smaller, &larger));
-        assert!(!PartialOrd::lt(&larger, &smaller));
-        assert!(PartialOrd::gt(&larger, &smaller));
-        assert!(!PartialOrd::gt(&smaller, &larger));
     }
 
     #[test]

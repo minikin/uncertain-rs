@@ -37,6 +37,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Error messages now include structured data (e.g., expected vs actual counts)
 - Improved error messages with more context and helpful information
 
+### Removed
+
+- **BREAKING**: `Uncertain<T>` no longer implements `PartialEq`/`PartialOrd`. The removed
+  impls drew one fresh sample per side and compared those samples, which isn't a
+  meaningful fact about a distribution and silently broke both traits' contracts (`a == a`
+  could be `false`). Use the evidence-based `Comparison` trait (`a.gt(threshold)`,
+  `a.lt_uncertain(&b)`, etc.) instead. See `MIGRATION_GUIDE.md`.
+
 ## [0.2.0] - 2024-09-24
 
 ### Added
