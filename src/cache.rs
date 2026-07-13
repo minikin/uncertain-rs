@@ -757,6 +757,136 @@ mod tests {
     }
 
     #[test]
+    fn test_ttl_cache_hit_rate_exact() {
+        // `get_or_compute` gives deterministic counting: the first call on a
+        // fresh key is always a miss, every subsequent call on that same
+        // (non-expired) key is a hit. A bare `.get()` on a key that was never
+        // inserted counts as neither (see `TtlCache::get`), so it can't be
+        // used to manufacture a miss here.
+        let cache = TtlCache::new(Duration::from_secs(10));
+        let _ = cache.get_or_compute("k", || 1); // miss
+        let _ = cache.get_or_compute("k", || 2); // hit
+        let _ = cache.get_or_compute("k", || 3); // hit
+        let _ = cache.get_or_compute("k", || 4); // hit
+
+        assert!((cache.hit_rate() - 75.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_ttl_cache_hit_rate_zero_total() {
+        let cache: TtlCache<&str, i32> = TtlCache::new(Duration::from_secs(10));
+        assert_eq!(cache.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_cache_stats_hit_rate_exact() {
+        let stats = CacheStats { hits: 3, misses: 1 };
+        assert!((stats.hit_rate() - 75.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_cache_stats_hit_rate_zero_total() {
+        let stats = CacheStats { hits: 0, misses: 0 };
+        assert_eq!(stats.hit_rate(), 0.0);
+    }
+
+    #[test]
+    fn test_ttl_cache_reset_stats() {
+        let cache = TtlCache::new(Duration::from_secs(10));
+        let _ = cache.get_or_compute("k", || 1); // miss
+        let _ = cache.get_or_compute("k", || 2); // hit
+
+        let stats = cache.cache_stats();
+        assert_eq!(stats.hits, 1);
+        assert_eq!(stats.misses, 1);
+
+        cache.reset_stats();
+
+        let stats_after = cache.cache_stats();
+        assert_eq!(stats_after.hits, 0);
+        assert_eq!(stats_after.misses, 0);
+    }
+
+    #[test]
+    fn test_statistics_cache_cleanup_all_expired_removes_entries() {
+        // Field access relies on this test module being a child of the `cache`
+        // module (private fields are visible to descendant modules).
+        let short_ttl = Duration::from_millis(20);
+        let long_ttl = Duration::from_secs(300);
+        let cache = StatisticsCache {
+            expected_value: TtlCache::new(short_ttl),
+            variance: TtlCache::new(short_ttl),
+            skewness: TtlCache::new(long_ttl),
+            kurtosis: TtlCache::new(long_ttl),
+            confidence_intervals: TtlCache::new(long_ttl),
+            cdf: TtlCache::new(long_ttl),
+            quantiles: TtlCache::new(long_ttl),
+        };
+        let id = uuid::Uuid::new_v4();
+        cache.get_or_compute_expected_value(id, 10, || 1.0);
+        cache.get_or_compute_variance(id, 10, || 2.0);
+        assert_eq!(cache.expected_value.len(), 1);
+        assert_eq!(cache.variance.len(), 1);
+
+        thread::sleep(Duration::from_millis(40));
+        cache.cleanup_all_expired();
+
+        assert_eq!(cache.expected_value.len(), 0);
+        assert_eq!(cache.variance.len(), 0);
+    }
+
+    #[test]
+    fn test_distribution_cache_cleanup_all_expired_removes_entries() {
+        let short_ttl = Duration::from_millis(20);
+        let cache = DistributionCache {
+            samples: TtlCache::new(short_ttl),
+            pdf_kde: TtlCache::new(short_ttl),
+        };
+        let id = uuid::Uuid::new_v4();
+        cache.get_or_compute_samples(id, 10, || vec![1.0]);
+        cache.get_or_compute_pdf_kde(id, 10, 1.0, 0.1, || 0.5);
+        assert_eq!(cache.samples.len(), 1);
+        assert_eq!(cache.pdf_kde.len(), 1);
+
+        thread::sleep(Duration::from_millis(40));
+        cache.cleanup_all_expired();
+
+        assert_eq!(cache.samples.len(), 0);
+        assert_eq!(cache.pdf_kde.len(), 0);
+    }
+
+    #[test]
+    fn test_statistics_cache_overall_stats_exact() {
+        let cache = StatisticsCache::new();
+        let id1 = uuid::Uuid::new_v4();
+        let id2 = uuid::Uuid::new_v4();
+
+        cache.get_or_compute_expected_value(id1, 10, || 1.0); // miss
+        cache.get_or_compute_expected_value(id1, 10, || 2.0); // hit (cached)
+        cache.get_or_compute_variance(id2, 10, || 5.0); // miss
+
+        let stats = cache.overall_stats();
+        assert_eq!(stats.hits, 1);
+        assert_eq!(stats.misses, 2);
+    }
+
+    #[test]
+    fn test_distribution_cache_overall_stats_exact() {
+        let cache = DistributionCache::new();
+        let id1 = uuid::Uuid::new_v4();
+        cache.get_or_compute_samples(id1, 10, || vec![1.0]); // miss
+        cache.get_or_compute_samples(id1, 10, || vec![2.0]); // hit (cached)
+
+        let id2 = uuid::Uuid::new_v4();
+        cache.get_or_compute_pdf_kde(id2, 10, 1.0, 0.1, || 0.5); // miss
+        cache.get_or_compute_pdf_kde(id2, 10, 1.0, 0.1, || 0.9); // hit (cached)
+
+        let stats = cache.overall_stats();
+        assert_eq!(stats.hits, 2);
+        assert_eq!(stats.misses, 2);
+    }
+
+    #[test]
     fn test_cache_key_precision_handling() {
         let cache = StatisticsCache::new();
         let test_id = uuid::Uuid::new_v4();

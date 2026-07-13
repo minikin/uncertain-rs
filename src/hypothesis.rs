@@ -375,6 +375,18 @@ mod tests {
     use super::*;
     use crate::operations::Comparison;
 
+    /// Produces an `Uncertain<bool>` that deterministically cycles through `pattern`
+    /// in order (no randomness), so tests can assert exact expected values instead of
+    /// loose statistical tolerances.
+    fn deterministic_bool_cycle(pattern: Vec<bool>) -> Uncertain<bool> {
+        let idx = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let pattern = std::sync::Arc::new(pattern);
+        Uncertain::new(move || {
+            let i = idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % pattern.len();
+            pattern[i]
+        })
+    }
+
     #[test]
     fn test_probability_exceeds() {
         let always_true = Uncertain::point(true);
@@ -423,6 +435,101 @@ mod tests {
     }
 
     #[test]
+    fn test_evaluate_hypothesis_certain_true_exact_samples() {
+        // With deterministic all-true evidence, threshold=0.5, default confidence
+        // (alpha=beta=0.05), epsilon=0.05, batch_size=1, the SPRT log-likelihood-ratio
+        // crosses the upper (accept H1) boundary at exactly 15 samples. This exact
+        // count is sensitive to the `a`/`b` boundary formulas (lines ~148-149) and the
+        // LLR accumulation itself.
+        let certain_true = Uncertain::point(true);
+        let result = certain_true.evaluate_hypothesis(0.5, 0.95, 10_000, None, None, None, 1);
+        assert!(result.decision);
+        assert_eq!(result.samples_used, 15);
+    }
+
+    #[test]
+    fn test_evaluate_hypothesis_certain_false_exact_samples() {
+        let certain_false = Uncertain::point(false);
+        let result = certain_false.evaluate_hypothesis(0.5, 0.95, 10_000, None, None, None, 1);
+        assert!(!result.decision);
+        assert_eq!(result.samples_used, 15);
+    }
+
+    #[test]
+    fn test_evaluate_hypothesis_extreme_error_rates_boundary_sensitive() {
+        // alpha=beta=0.5 makes `a` collapse to ln(1.0)=0.0 with the correct `/`
+        // formula, so a certain-false evidence source's very first (negative) LLR
+        // sample immediately triggers the H0-accept branch. Mutating that division to
+        // `%` makes beta_error % (1-alpha_error) == 0.0 (since both are 0.5), so
+        // `a` becomes ln(0.0) = -inf and the H0-accept branch never triggers,
+        // running all the way to max_samples instead of stopping after 1 sample.
+        let certain_false = Uncertain::point(false);
+        let result =
+            certain_false.evaluate_hypothesis(0.5, 0.95, 200, None, Some(0.5), Some(0.5), 1);
+        assert_eq!(result.samples_used, 1);
+        assert!(!result.decision);
+    }
+
+    #[test]
+    fn test_evaluate_hypothesis_batch_size_respects_remaining_budget() {
+        // With batch_size=10 and max_samples=25, the final batch must be clipped to
+        // the 5 remaining samples (25 - 20), not run a full batch of 10 and overshoot
+        // past max_samples. An alternating true/false evidence source keeps the LLR
+        // near zero throughout, so this exits via the max_samples fallback.
+        let alternating = deterministic_bool_cycle(vec![true, false]);
+        let result = alternating.evaluate_hypothesis(0.5, 0.95, 25, None, None, None, 10);
+        assert_eq!(result.samples_used, 25);
+        assert!(result.decision); // 13 true / 25 = 0.52 > 0.5
+    }
+
+    #[test]
+    fn test_evaluate_hypothesis_h0_accept_reports_exact_probability() {
+        // A mostly-false (1-in-5) evidence source accepts H0 (decision=false) at
+        // exactly 23 samples with 4 successes, so the returned `probability` field
+        // must be exactly 4/23. This targets the division computing `probability` on
+        // the H0-accept return path specifically (a separate return statement from
+        // the fallback path tested elsewhere).
+        let mostly_false = deterministic_bool_cycle(vec![false, false, false, false, true]);
+        let result = mostly_false.evaluate_hypothesis(0.5, 0.95, 10_000, None, None, None, 1);
+        assert!(!result.decision);
+        assert_eq!(result.samples_used, 23);
+        assert!((result.probability - 4.0 / 23.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_evaluate_hypothesis_fallback_decision_uses_strict_greater_than() {
+        // max_samples=1 with certain-true evidence can't cross either SPRT boundary
+        // in a single sample, so it exits via the max_samples fallback with
+        // decision computed directly from `final_p > threshold`. final_p=1.0 clearly
+        // exceeds threshold=0.3, distinguishing `>` from `<` (unlike the 0.5-vs-0.5
+        // exact-tie case in the other fallback test, which can't tell them apart).
+        let certain_true = Uncertain::point(true);
+        let result = certain_true.evaluate_hypothesis(0.3, 0.95, 1, None, None, None, 1);
+        assert_eq!(result.samples_used, 1);
+        assert!(result.decision);
+    }
+
+    // NOTE: `p0.clamp(1e-10, 1.0 - 1e-10)` / `p1.clamp(1e-10, 1.0 - 1e-10)` (the
+    // `p0_clamped`/`p1_clamped` computation) have an equivalent-mutant upper bound:
+    // p0/p1 are already clamped to [0.001, 0.999] earlier, and 0.999 < 1.0 - 1e-10
+    // always, so that upper bound never binds regardless of whether it's computed as
+    // `1.0 - 1e-10`, `1.0 + 1e-10`, or `1.0 / 1e-10` -- no test can distinguish these
+    // without first changing the earlier [0.001, 0.999] clamp.
+
+    #[test]
+    fn test_evaluate_hypothesis_fallback_when_llr_never_crosses() {
+        // An alternating true/false evidence source keeps the LLR oscillating near
+        // zero, never reaching the a/b thresholds, so this must exhaust max_samples
+        // via the `while samples < max_samples` loop condition itself and fall back
+        // to `final_p > threshold`. With max_samples=10 and exactly half the samples
+        // true, final_p == 0.5 == threshold, so `>` (not `<=`) must yield `false`.
+        let alternating = deterministic_bool_cycle(vec![true, false]);
+        let result = alternating.evaluate_hypothesis(0.5, 0.95, 10, None, None, None, 1);
+        assert_eq!(result.samples_used, 10);
+        assert!(!result.decision);
+    }
+
+    #[test]
     fn test_sprt_efficiency() {
         // Clear cases should be decided quickly
         let certain_true = Uncertain::point(true);
@@ -442,6 +549,38 @@ mod tests {
 
         // These tests are probabilistic but should generally hold
         assert!(!high_confidence); // Very unlikely to be 95% confident
+    }
+
+    #[test]
+    fn test_estimate_probability_exact() {
+        let condition = deterministic_bool_cycle(vec![true, false, true]);
+        // 2 of 3 samples true, deterministically.
+        assert!((condition.estimate_probability(3) - 2.0 / 3.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_bayesian_update_evidence_present_exact() {
+        // evidence_prob = 1.0 (point(true), always > 0.5) takes the "present" branch:
+        // posterior = (likelihood_given_true * prior) / evidence_total
+        let evidence = Uncertain::point(true);
+        let posterior = Uncertain::bayesian_update(0.5, &evidence, 0.8, 0.2, 10);
+        assert!((posterior - 0.8).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_bayesian_update_evidence_at_exact_boundary_takes_absent_branch() {
+        // evidence_prob == 0.5 exactly is NOT > 0.5, so this must take the "absent"
+        // branch: posterior = ((1 - likelihood_given_true) * prior) / (1 - evidence_total)
+        let evidence = deterministic_bool_cycle(vec![true, false]);
+        assert!((evidence.estimate_probability(2) - 0.5).abs() < 1e-12);
+
+        let posterior = Uncertain::bayesian_update(0.5, &evidence, 0.8, 0.2, 2);
+        // evidence_total = 0.8*0.5 + 0.2*0.5 = 0.5
+        // posterior = (1-0.8)*0.5 / (1-0.5) = 0.1/0.5 = 0.2
+        assert!(
+            (posterior - 0.2).abs() < 1e-9,
+            "expected 0.2, got {posterior}"
+        );
     }
 
     #[test]
@@ -478,6 +617,49 @@ mod tests {
         assert_eq!(results[0].0, "warm");
         // Can't guarantee the decision due to randomness, but we can check structure
         assert!(results[0].1.samples_used > 0);
+    }
+
+    #[test]
+    fn test_test_all_corrected_alpha_exact() {
+        // corrected_alpha = overall_alpha / hypotheses.len(); confidence_level =
+        // 1.0 - corrected_alpha. HypothesisResult passes confidence_level straight
+        // through, so this is an exact, sampling-independent check of that formula.
+        let hypotheses = vec![
+            Uncertain::point(true),
+            Uncertain::point(true),
+            Uncertain::point(true),
+        ];
+        let names = vec!["a", "b", "c"];
+        let tester = MultipleHypothesisTester::new(hypotheses, names);
+        let results = tester.test_all(0.06, 100);
+
+        // corrected_alpha = 0.06 / 3 = 0.02; confidence_level = 1.0 - 0.02 = 0.98
+        for (_, result) in &results {
+            assert!(
+                (result.confidence_level - 0.98).abs() < 1e-9,
+                "expected confidence_level 0.98, got {}",
+                result.confidence_level
+            );
+        }
+    }
+
+    #[test]
+    fn test_test_all_empty_hypotheses_uses_overall_alpha() {
+        let tester = MultipleHypothesisTester::new(vec![], vec![]);
+        let results = tester.test_all(0.05, 100);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn test_find_most_likely_all_zero_probability_returns_none() {
+        // best_prob starts at 0.0; with the correct strict `>` comparison, a
+        // hypothesis whose probability is also exactly 0.0 must NOT overwrite the
+        // "no best yet" state. Mutating `>` to `>=` would make the first zero-
+        // probability hypothesis incorrectly "win".
+        let hypotheses = vec![Uncertain::point(false), Uncertain::point(false)];
+        let names = vec!["a", "b"];
+        let tester = MultipleHypothesisTester::new(hypotheses, names);
+        assert_eq!(tester.find_most_likely(10), None);
     }
 
     #[test]

@@ -906,4 +906,152 @@ mod tests {
         let samples: Vec<u32> = geometric.take_samples(100);
         assert!(samples.iter().all(|&x| x == 1));
     }
+
+    #[test]
+    fn test_mixture_weighted_selection_uses_correct_proportions() {
+        // Weights [1.0, 3.0] over total 4.0 => component 0 should be picked ~25% of the
+        // time. A `/` -> `%` or `/` -> `*` mutation in the weight-normalization leaves
+        // unnormalized weights (both >= total's modulus/product), which collapses
+        // selection onto whichever component is checked first in the cumulative array,
+        // producing a ratio far from 0.25. This also exercises the `<=` boundary in the
+        // cumulative lookup (a `<=` -> `>` mutation there swaps which component wins).
+        let low = Uncertain::normal(0.0, 0.001).unwrap();
+        let high = Uncertain::normal(100.0, 0.001).unwrap();
+        let mixture = Uncertain::mixture(vec![low, high], Some(vec![1.0, 3.0])).unwrap();
+        let samples: Vec<f64> = mixture.take_samples(10_000);
+        let low_ratio = samples.iter().filter(|&&x| x < 50.0).count() as f64 / samples.len() as f64;
+        assert!(
+            (low_ratio - 0.25).abs() < 0.05,
+            "expected ~25% low-component selections, got {low_ratio}"
+        );
+    }
+
+    #[test]
+    fn test_categorical_selection_uses_correct_proportions() {
+        // Same rationale as the mixture test above, for the categorical distribution's
+        // independent weight-normalization code path. Proportions are checked
+        // order-independently (HashMap iteration order is unspecified): "common"'s share
+        // is prob/total regardless of which key the loop visits first.
+        let mut probs = HashMap::new();
+        probs.insert("rare", 1.0);
+        probs.insert("common", 3.0);
+        let categorical = Uncertain::categorical(&probs).unwrap();
+        let samples: Vec<&str> = categorical.take_samples(10_000);
+        let common_ratio =
+            samples.iter().filter(|&&x| x == "common").count() as f64 / samples.len() as f64;
+        assert!(
+            (common_ratio - 0.75).abs() < 0.05,
+            "expected ~75% 'common' selections, got {common_ratio}"
+        );
+    }
+
+    #[test]
+    fn test_normal_distribution_moments() {
+        // Checks both mean AND standard deviation (the existing test only checked mean),
+        // with a tolerance tight enough to catch a corrupted Box-Muller formula (e.g. a
+        // `*` -> `/` swap inside the `sqrt(-2 ln u1) * cos(2*pi*u2)` term) while staying
+        // well outside normal sampling noise at this sample size.
+        let normal = Uncertain::normal(10.0, 3.0).unwrap();
+        let samples: Vec<f64> = normal.take_samples(20_000);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let variance =
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let std = variance.sqrt();
+        assert!((mean - 10.0).abs() < 0.15, "mean {mean}, expected 10.0");
+        assert!((std - 3.0).abs() < 0.25, "std {std}, expected 3.0");
+    }
+
+    #[test]
+    fn test_beta_distribution_moments() {
+        // Closed-form: mean = a/(a+b), variance = ab / ((a+b)^2 (a+b+1)).
+        // Deliberately skewed (2.0, 8.0) so an arithmetic corruption in the
+        // rejection-sampling accept condition or final ratio shows up clearly.
+        let alpha = 2.0;
+        let beta_param = 8.0;
+        let beta = Uncertain::beta(alpha, beta_param).unwrap();
+        let samples: Vec<f64> = beta.take_samples(20_000);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let expected_mean = alpha / (alpha + beta_param);
+        assert!(
+            (mean - expected_mean).abs() < 0.02,
+            "mean {mean}, expected {expected_mean}"
+        );
+
+        let variance =
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let expected_variance =
+            (alpha * beta_param) / ((alpha + beta_param).powi(2) * (alpha + beta_param + 1.0));
+        assert!(
+            (variance - expected_variance).abs() < 0.01,
+            "variance {variance}, expected {expected_variance}"
+        );
+    }
+
+    #[test]
+    fn test_beta_final_ratio_uses_division_not_modulo() {
+        // With alpha == beta == 0.5, x and y (both in the accepted region x+y<=1) are
+        // large enough relative to their sum that `x` alone (what a `/` -> `%` mutation
+        // in `x / (x + y)` would return, since 0 <= x < x+y makes `x % (x+y) == x`)
+        // has a mean far from the true `x / (x + y)` mean: simulation shows ~0.50 vs
+        // ~0.25 for these parameters, a much larger gap than the (2.0, 8.0) case above
+        // where the two coincidentally land close together.
+        let alpha = 0.5;
+        let beta_param = 0.5;
+        let beta = Uncertain::beta(alpha, beta_param).unwrap();
+        let samples: Vec<f64> = beta.take_samples(20_000);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let expected_mean = alpha / (alpha + beta_param);
+        assert!(
+            (mean - expected_mean).abs() < 0.05,
+            "mean {mean}, expected {expected_mean}"
+        );
+    }
+
+    #[test]
+    fn test_gamma_distribution_moments_shape_at_least_one() {
+        // Exercises the Marsaglia-Tsang branch (shape >= 1.0). Closed-form:
+        // mean = shape*scale, variance = shape*scale^2.
+        let shape = 3.0;
+        let scale = 2.0;
+        let gamma = Uncertain::gamma(shape, scale).unwrap();
+        let samples: Vec<f64> = gamma.take_samples(30_000);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let expected_mean = shape * scale;
+        assert!(
+            (mean - expected_mean).abs() < expected_mean * 0.1,
+            "mean {mean}, expected {expected_mean}"
+        );
+
+        let variance =
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let expected_variance = shape * scale * scale;
+        assert!(
+            (variance - expected_variance).abs() < expected_variance * 0.2,
+            "variance {variance}, expected {expected_variance}"
+        );
+    }
+
+    #[test]
+    fn test_gamma_distribution_moments_shape_below_one() {
+        // Exercises the shape < 1.0 transformation branch (gamma_1_plus_shape *
+        // u.powf(1/shape)), which the shape >= 1.0 test above never reaches.
+        let shape = 0.5;
+        let scale = 3.0;
+        let gamma = Uncertain::gamma(shape, scale).unwrap();
+        let samples: Vec<f64> = gamma.take_samples(30_000);
+        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+        let expected_mean = shape * scale;
+        assert!(
+            (mean - expected_mean).abs() < expected_mean * 0.2,
+            "mean {mean}, expected {expected_mean}"
+        );
+
+        let variance =
+            samples.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / samples.len() as f64;
+        let expected_variance = shape * scale * scale;
+        assert!(
+            (variance - expected_variance).abs() < expected_variance * 0.3,
+            "variance {variance}, expected {expected_variance}"
+        );
+    }
 }

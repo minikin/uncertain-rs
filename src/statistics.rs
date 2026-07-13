@@ -1690,4 +1690,504 @@ mod tests {
         let total: usize = histogram.values().sum();
         assert_eq!(total, 300);
     }
+
+    // No seeded RNG yet, so this cycles through a fixed sequence via an atomic
+    // counter to make exact numeric assertions possible instead of relying on
+    // statistical tolerance, which doesn't distinguish e.g. `-` from `+` in a formula.
+    fn deterministic_sequence<T: Clone + Send + Sync + 'static>(values: Vec<T>) -> Uncertain<T> {
+        let idx = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let values = std::sync::Arc::new(values);
+        Uncertain::new(move || {
+            let i = idx.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % values.len();
+            values[i].clone()
+        })
+    }
+
+    #[test]
+    fn test_lazy_stats_quantile_interpolation_exact() {
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        let stats = seq.lazy_stats(5);
+        // position = 0.3 * 4 = 1.2 -> lower=1 (20.0), upper=2 (30.0), weight=0.2
+        // 20.0 + 0.2 * (30.0 - 20.0) = 22.0
+        assert!((stats.quantile(0.3) - 22.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_lazy_stats_quantile_equal_branch_clamp() {
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        let stats = seq.lazy_stats(5);
+        // q=1.5 (out of the documented [0,1] range, not yet validated -- see spec 18)
+        // gives an exact-integer position (6.0), landing in the equal-index branch,
+        // which must clamp to the last valid index rather than reading out of bounds.
+        assert!((stats.quantile(1.5) - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_lazy_stats_quantile_interp_branch_clamp() {
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        let stats = seq.lazy_stats(5);
+        // q=1.125 gives position=4.5: lower_idx=4 (in bounds), upper_idx=5 (must
+        // clamp to 4, the last valid index) in the interpolation branch.
+        assert!((stats.quantile(1.125) - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_lazy_stats_confidence_interval_exact() {
+        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
+        let stats = seq.lazy_stats(10);
+        let (lower, upper) = stats.confidence_interval(0.8);
+        assert!((lower - 1.0).abs() < 1e-9);
+        assert!((upper - 9.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_lazy_stats_confidence_interval_lower_clamp() {
+        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
+        let stats = seq.lazy_stats(10);
+        // confidence=-1.0 is out of the documented (0,1) range (not yet validated --
+        // see spec 18), but it drives lower_idx's raw (pre-clamp) value past the
+        // array bound, exercising the lower-index clamp specifically.
+        let (lower, upper) = stats.confidence_interval(-1.0);
+        assert!((lower - 10.0).abs() < 1e-9);
+        assert!((upper - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_lazy_stats_confidence_interval_upper_clamp() {
+        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
+        let stats = seq.lazy_stats(10);
+        // confidence=3.0 drives upper_idx's raw (pre-clamp) value past the array
+        // bound, exercising the upper-index clamp specifically.
+        let (lower, upper) = stats.confidence_interval(3.0);
+        assert!((lower - 1.0).abs() < 1e-9);
+        assert!((upper - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_uncertain_confidence_interval_exact() {
+        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
+        let (lower, upper) = seq.confidence_interval(0.8, 10);
+        assert!((lower - 1.0).abs() < 1e-9);
+        assert!((upper - 9.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_uncertain_confidence_interval_lower_clamp() {
+        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
+        let (lower, upper) = seq.confidence_interval(-1.0, 10);
+        assert!((lower - 10.0).abs() < 1e-9);
+        assert!((upper - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_uncertain_confidence_interval_upper_clamp() {
+        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
+        let (lower, upper) = seq.confidence_interval(3.0, 10);
+        assert!((lower - 1.0).abs() < 1e-9);
+        assert!((upper - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_uncertain_quantile_interpolation_exact() {
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        assert!((seq.quantile(0.3, 5) - 22.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_uncertain_quantile_equal_branch_clamp() {
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        assert!((seq.quantile(1.5, 5) - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_uncertain_quantile_interp_branch_clamp() {
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        assert!((seq.quantile(1.125, 5) - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_ensure_samples_exact_progression() {
+        // ensure_samples/progressive_stats/current_samples are private fields/methods,
+        // but this test module is a descendant of their defining module, so they're
+        // directly accessible -- avoids needing to reverse-engineer exact behavior
+        // through the public convergence-loop API alone.
+        let seq = deterministic_sequence(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]);
+        let config = AdaptiveSampling {
+            min_samples: 3,
+            max_samples: 100,
+            error_threshold: 0.0001,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&seq, &config);
+
+        stats.ensure_samples(3);
+        assert_eq!(stats.progressive_stats.borrow().count(), 3);
+        assert!((stats.progressive_stats.borrow().mean() - 2.0).abs() < 1e-9); // [1,2,3]
+
+        // current == target: a no-op either way (additional_samples would be 0
+        // regardless of `<` vs `<=` here), so this call intentionally isn't used
+        // to distinguish that particular mutant -- see the fork report.
+        stats.ensure_samples(3);
+        assert_eq!(stats.progressive_stats.borrow().count(), 3);
+
+        stats.ensure_samples(7);
+        // additional_samples = 7 - 3 = 4, consuming the next 4 values [4,5,6,7].
+        // A `target_samples - *current` -> `target_samples + *current` mutation
+        // would instead consume 7 + 3 = 10 values here.
+        assert_eq!(stats.progressive_stats.borrow().count(), 7);
+        assert!((stats.progressive_stats.borrow().mean() - 4.0).abs() < 1e-9); // [1..7]
+    }
+
+    #[test]
+    fn test_adaptive_mean_stops_before_min_samples_check_is_premature() {
+        // A loose error_threshold means that if the `sample_count > min_samples`
+        // guard is mutated to `>=`, the convergence check would (wrongly) run on
+        // the very first iteration and immediately accept it, terminating early
+        // with fewer samples than correct code would use.
+        let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = call_count.clone();
+        let source = Uncertain::new(move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            5.0
+        });
+        let config = AdaptiveSampling {
+            min_samples: 10,
+            max_samples: 1000,
+            error_threshold: 2.0,
+            growth_factor: 1.5,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let mean = stats.mean();
+        assert!((mean - 5.0).abs() < 1e-9);
+        // Correct: iteration 1 (target 10) skips the premature check; iteration 2
+        // (target 15) converges (relative_error 0.0 < 2.0), so current_samples
+        // ends at the cumulative target of 15, not 10.
+        assert_eq!(*stats.current_samples.borrow(), 15);
+    }
+
+    #[test]
+    fn test_adaptive_mean_zero_mean_branch() {
+        // When the running mean is exactly 0.0, the code takes an absolute-difference
+        // branch instead of a relative one (avoiding a 0/0 division). A constant-zero
+        // source keeps the mean at exactly 0.0 for every sample_count, so mutating
+        // that `mean == 0.0` check to `!=` forces the relative (0.0/0.0 = NaN) branch,
+        // which never satisfies `< error_threshold` and so never converges early --
+        // it runs until sample_count hits max_samples instead.
+        let source = Uncertain::new(|| 0.0);
+        let config = AdaptiveSampling {
+            min_samples: 5,
+            max_samples: 50,
+            error_threshold: 0.01,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let mean = stats.mean();
+        assert!(mean.abs() < 1e-9);
+        assert_eq!(*stats.current_samples.borrow(), 10);
+    }
+
+    #[test]
+    fn test_adaptive_variance_stops_before_min_samples_check_is_premature() {
+        let source = Uncertain::new(|| 5.0);
+        let config = AdaptiveSampling {
+            min_samples: 10,
+            max_samples: 1000,
+            error_threshold: 2.0,
+            growth_factor: 1.5,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let variance = stats.variance();
+        assert!(variance.abs() < 1e-9); // constant source -> variance 0
+        assert_eq!(*stats.current_samples.borrow(), 15);
+    }
+
+    #[test]
+    fn test_adaptive_variance_zero_branch() {
+        let source = Uncertain::new(|| 0.0);
+        let config = AdaptiveSampling {
+            min_samples: 5,
+            max_samples: 50,
+            error_threshold: 0.01,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let variance = stats.variance();
+        assert!(variance.abs() < 1e-9);
+        assert_eq!(*stats.current_samples.borrow(), 10);
+    }
+
+    #[test]
+    fn test_expected_value_adaptive_stops_before_min_samples_check_is_premature() {
+        let call_count = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = call_count.clone();
+        let source = Uncertain::new(move || {
+            counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            5.0
+        });
+        let config = AdaptiveSampling {
+            min_samples: 10,
+            max_samples: 1000,
+            error_threshold: 2.0,
+            growth_factor: 1.5,
+        };
+        let mean = source.expected_value_adaptive(&config);
+        assert!((mean - 5.0).abs() < 1e-9);
+        // Correct: skips the premature check at iteration 1 (10 samples), converges
+        // at iteration 2 (15 more samples, 25 total). A `>` -> `>=` mutation on the
+        // min_samples guard would instead accept convergence at iteration 1 (10 total).
+        assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 25);
+    }
+
+    #[test]
+    fn test_mode_exact_with_dominant_value() {
+        // `*counts.entry(sample).or_insert(0) += 1` mutated to `*= 1` would leave
+        // every count at 0 forever, making the "mode" effectively an arbitrary pick
+        // among tied keys (HashMap iteration order isn't meaningful). Using a
+        // clearly dominant value against a wide spread of distinct singleton
+        // "noise" values makes it overwhelmingly unlikely that a broken (all-zero)
+        // tie-break would coincidentally land back on the dominant value.
+        let mut values = vec![7; 50];
+        values.extend(0..30); // 30 distinct singleton values: 0..29
+        let seq = deterministic_sequence(values.clone());
+        let mode = seq.mode(values.len());
+        assert_eq!(mode, Some(7));
+    }
+
+    #[test]
+    fn test_skewness_and_kurtosis_exact() {
+        let seq = deterministic_sequence(vec![1.0, 1.0, 1.0, 1.0, 10.0]);
+        // mean=2.8, population variance=12.96, std=3.6
+        // skewness = sum(((x-mean)/std)^3)/n = 1.5
+        // excess kurtosis = sum(((x-mean)/std)^4)/n - 3.0 = 0.25
+        assert!((seq.skewness(5) - 1.5).abs() < 1e-9);
+        assert!((seq.kurtosis(5) - 0.25).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_median_absolute_deviation_exact() {
+        // An EVEN sample count is needed: `(len() - 1) / 2` and a mutated
+        // `(len() / 1) / 2` (i.e. `len() / 2`) happen to floor to the same integer
+        // index for odd lengths (e.g. both give 2 for len=5), masking that mutant.
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 100.0]);
+        // quantile(0.5, 4): position=0.5*3=1.5 -> lower=20.0, upper=30.0, weight=0.5
+        // -> median = 25.0. deviations sorted = [5,5,15,75]; mad_index=(4-1)/2=1 -> 5.0
+        assert!((seq.median_absolute_deviation(4) - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_pdf_kde_and_log_likelihood_exact() {
+        // Asymmetric sample set around a non-zero x: a symmetric set (e.g.
+        // [0,1,-1,2,-2] evaluated at x=0) makes `(x - xi)` and a mutated
+        // `(x + xi)` square to the same value for every term, an accidental
+        // equivalence -- asymmetric data avoids that. bandwidth=2.0 (not 1.0)
+        // matters too: multiplying vs dividing by exactly 1.0 in the denominator
+        // gives the same result, masking a `sample_count * bandwidth` -> `/` mutant.
+        let seq = deterministic_sequence(vec![0.0, 1.0, 2.0, -1.5]);
+        let pdf = seq.pdf_kde(0.5, 4, 2.0);
+        assert!((pdf - 0.164_555_548_784_955_8).abs() < 1e-9);
+        let ll = seq.log_likelihood(0.5, 4, 2.0);
+        assert!((ll - (-1.804_507_083_195_324)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_correlation_exact() {
+        let x = deterministic_sequence(vec![1.0, 3.0, 2.0, 8.0, 5.0]);
+        let y = deterministic_sequence(vec![2.0, 1.0, 9.0, 4.0, 3.0]);
+        let correlation = x.correlation(&y, 5);
+        assert!((correlation - (-0.063_640_188_856_59)).abs() < 1e-9);
+    }
+
+    // NOTE ON EQUIVALENT MUTANTS (verified algebraically, not just "hard to test"):
+    // `correlation`'s numerator sums `(x - mean_x) * (y - mean_y)`. Mutating either
+    // `-` to `+` (statistics.rs:1075, both occurrences) does not change the sum:
+    // sum((x + mean_x) * (y - mean_y)) = sum((x - mean_x)*(y - mean_y)) + 2*mean_x*sum(y - mean_y),
+    // and sum(y - mean_y) over any dataset is always exactly 0 by definition of the
+    // mean. The same cancellation applies symmetrically to the y-side `-`. Verified
+    // numerically (see fork report) as well as algebraically.
+
+    #[test]
+    fn test_correlation_zero_variance_in_second_argument() {
+        // Mirrors the existing `test_correlation_zero_variance` (constant x) but with
+        // the constant on y instead, which is the side that must be checked to catch
+        // `var_x * var_y > 0.0` mutated to `var_x / var_y > 0.0`: with var_x > 0.0 and
+        // var_y == 0.0 exactly, the real code's `*` gives 0.0 (not > 0.0, correctly
+        // short-circuiting to a 0.0 result); the mutant's `/` gives `+inf` (`> 0.0` is
+        // true), so it proceeds to divide a numerator of 0.0 (since y is constant, every
+        // `y - mean_y` term is 0.0) by `sqrt(0.0)`, producing `NaN`.
+        let x = Uncertain::normal(0.0, 1.0).unwrap();
+        let y = Uncertain::new(|| 7.0);
+        let correlation = x.correlation(&y, 1000);
+        assert!(correlation.abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_adaptive_mean_nonzero_relative_error_arithmetic() {
+        // An ever-increasing (non-repeating) source makes each iteration's
+        // progressive mean genuinely different from the last, so the relative-error
+        // arithmetic (`-`, `/`) actually matters -- a constant source gives 0/anything
+        // regardless of which operator is used, masking these mutants.
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 64,
+            error_threshold: 0.6,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let mean = stats.mean();
+        // Real: converges once sample_count reaches 8 (relative_error 0.5714 < 0.6);
+        // mean over the cumulative [0..7] range is (0+7)/2 = 3.5.
+        assert!((mean - 3.5).abs() < 1e-9);
+        assert_eq!(*stats.current_samples.borrow(), 8);
+    }
+
+    #[test]
+    fn test_adaptive_mean_convergence_threshold_is_strict() {
+        // Sets error_threshold to EXACTLY the relative_error value real code computes
+        // at n=8 (2.0/3.5). Strict `<` of two equal f64 values is false, so real code
+        // must NOT converge at n=8 -- it only converges at n=16, once relative_error
+        // (0.5333) genuinely drops below that fixed threshold. A `<` -> `<=` mutation
+        // would accept the n=8 boundary immediately instead.
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 1000,
+            error_threshold: 2.0 / 3.5,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let mean = stats.mean();
+        assert!((mean - 7.5).abs() < 1e-9); // mean over cumulative [0..15]
+        assert_eq!(*stats.current_samples.borrow(), 16);
+    }
+
+    #[test]
+    fn test_adaptive_variance_nonzero_relative_error_arithmetic() {
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        // Variance's relative-error trajectory for an ever-increasing source is very
+        // different from mean's (it grows toward ~0.75 rather than shrinking toward
+        // 0.5), so this needs its own threshold, tuned so the real computation
+        // converges at n=8 while the arithmetic mutants (which push relative_error to
+        // ~1.3-26, see fork report) don't.
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 64,
+            error_threshold: 0.73,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let variance = stats.variance();
+        // ProgressiveStats::variance over [0..7] (n=8): mean=3.5, sum_squares=140,
+        // (140 - 8*3.5^2)/(8-1) = 6.0.
+        assert!((variance - 6.0).abs() < 1e-9);
+        assert_eq!(*stats.current_samples.borrow(), 8);
+    }
+
+    #[test]
+    fn test_adaptive_variance_convergence_threshold_is_strict() {
+        // Mirrors test_adaptive_mean_convergence_threshold_is_strict for variance:
+        // threshold set to EXACTLY the real relative_error at n=8. Unlike mean's
+        // relative_error (which shrinks toward 0.5 for this source), variance's
+        // relative_error only *grows* past n=8 (toward ~0.75) -- so with a strict `<`,
+        // real code never converges via the primary check again and runs all the way
+        // to max_samples. A `<` -> `<=` mutation accepts the n=8 boundary immediately.
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        let v4 = 5.0_f64 / 3.0; // ProgressiveStats::variance over [0..3]
+        let v8 = 6.0_f64; // ProgressiveStats::variance over [0..7]
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 64,
+            error_threshold: (v8 - v4) / v8,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let variance = stats.variance();
+        assert!((variance - 346.666_666_666_666_7).abs() < 1e-6);
+        assert_eq!(*stats.current_samples.borrow(), 64);
+    }
+
+    #[test]
+    fn test_adaptive_variance_numerator_subtraction_not_division() {
+        // A `variance - prev_variance` -> `variance / prev_variance` mutation at this
+        // position algebraically cancels with the outer `/ variance`, leaving just
+        // `1 / prev_variance` -- a value that happens to still be < the threshold used
+        // in `test_adaptive_variance_nonzero_relative_error_arithmetic` (0.73), so that
+        // test alone doesn't catch it. A lower threshold (0.65) makes the real
+        // relative_error (which only grows, ~0.72-0.75, and never crosses 0.65) run to
+        // max_samples, while the mutant's `1/prev_variance` (0.6 at n=8) converges
+        // immediately -- clearly different final variances.
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 64,
+            error_threshold: 0.65,
+            growth_factor: 2.0,
+        };
+        let stats = AdaptiveLazyStats::new(&source, &config);
+        let variance = stats.variance();
+        // Real: never converges via the primary check, runs to max_samples=64.
+        // ProgressiveStats::variance over [0..63]: computed via the same formula.
+        assert!((variance - 346.666_666_666_666_7).abs() < 1e-6);
+        assert_eq!(*stats.current_samples.borrow(), 64);
+    }
+
+    #[test]
+    fn test_expected_value_adaptive_nonzero_relative_error_arithmetic() {
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        // Threshold tuned so the mutated `mean - prev_mean -> mean / prev_mean`
+        // (relative_error 0.667 at n=8) still converges at n=8 with this threshold,
+        // same as real code (0.8), so a *lower* threshold (0.75) is needed to force
+        // real code to continue to n=16 while the mutant still stops at n=8.
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 64,
+            error_threshold: 0.75,
+            growth_factor: 2.0,
+        };
+        let mean = source.expected_value_adaptive(&config);
+        // Real: relative_error at n=8 is 0.8 (not < 0.75), continues to n=16 where
+        // relative_error is 0.6154 (< 0.75) -> converges with mean = 19.5 (fresh draw
+        // of positions 12..27... i.e. the third batch; see fork report for the exact
+        // simulation). The `/` mutant's relative_error at n=8 (0.667) IS < 0.75,
+        // so it stops early with mean = 7.5.
+        assert!((mean - 19.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_expected_value_adaptive_convergence_threshold_is_strict() {
+        // Mirrors test_adaptive_mean_convergence_threshold_is_strict: threshold set to
+        // EXACTLY the real relative_error at n=8 (0.8). Strict `<` of equal values is
+        // false, so real code must continue past n=8; a `<` -> `<=` mutation would
+        // accept it immediately.
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let c = counter.clone();
+        let source =
+            Uncertain::new(move || c.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        let config = AdaptiveSampling {
+            min_samples: 4,
+            max_samples: 1000,
+            error_threshold: 0.8,
+            growth_factor: 2.0,
+        };
+        let mean = source.expected_value_adaptive(&config);
+        assert!((mean - 19.5).abs() < 1e-9);
+    }
 }

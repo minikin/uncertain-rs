@@ -2001,4 +2001,285 @@ mod tests {
         let cloned = stats.clone();
         assert_eq!(cloned.count, stats.count);
     }
+
+    #[test]
+    fn test_with_caching_strategy_sets_strategy() {
+        let context = SampleContext::with_caching_strategy(CachingStrategy::Aggressive);
+        let trivial = ComputationNode::leaf(|| 1.0);
+        // Aggressive => always cache, even for a trivial leaf that Adaptive/Conservative
+        // would refuse. Distinguishes from `Default::default()` (which is Adaptive).
+        assert!(context.should_cache_node(&trivial));
+    }
+
+    #[test]
+    fn test_should_cache_node_conservative_boundary() {
+        let context = SampleContext::with_caching_strategy(CachingStrategy::Conservative);
+
+        let depth2 = ComputationNode::binary_op(
+            ComputationNode::leaf(|| 1.0),
+            ComputationNode::leaf(|| 2.0),
+            BinaryOperation::Add,
+        );
+        assert_eq!(depth2.depth(), 2);
+        assert!(!context.should_cache_node(&depth2));
+
+        let depth3 =
+            ComputationNode::binary_op(depth2, ComputationNode::leaf(|| 3.0), BinaryOperation::Add);
+        assert_eq!(depth3.depth(), 3);
+        assert!(context.should_cache_node(&depth3));
+    }
+
+    #[test]
+    fn test_should_cache_node_adaptive_boundary() {
+        let context = SampleContext::with_caching_strategy(CachingStrategy::Adaptive);
+
+        let complexity5 = ComputationNode::map(
+            ComputationNode::binary_op(
+                ComputationNode::leaf(|| 1.0),
+                ComputationNode::leaf(|| 2.0),
+                BinaryOperation::Add,
+            ),
+            |x| x,
+        );
+        assert_eq!(complexity5.compute_complexity(), 5);
+        assert!(!context.should_cache_node(&complexity5));
+
+        let complexity6 = ComputationNode::binary_op(
+            ComputationNode::map(ComputationNode::leaf(|| 1.0), |x| x),
+            ComputationNode::map(ComputationNode::leaf(|| 2.0), |x| x),
+            BinaryOperation::Add,
+        );
+        assert_eq!(complexity6.compute_complexity(), 6);
+        assert!(context.should_cache_node(&complexity6));
+    }
+
+    #[test]
+    fn test_adaptive_sampling_get_set() {
+        let mut context = SampleContext::new();
+        assert_eq!(context.adaptive_sampling().min_samples, 100);
+
+        let custom = AdaptiveSampling {
+            min_samples: 42,
+            max_samples: 999,
+            error_threshold: 0.05,
+            growth_factor: 2.0,
+        };
+        context.set_adaptive_sampling(custom);
+        assert_eq!(context.adaptive_sampling().min_samples, 42);
+        assert_eq!(context.adaptive_sampling().max_samples, 999);
+    }
+
+    #[test]
+    fn test_node_shape_metrics_leaf() {
+        let leaf = ComputationNode::leaf(|| 1.0);
+        assert_eq!(leaf.node_count(), 1);
+        assert_eq!(leaf.depth(), 1);
+        assert_eq!(leaf.compute_complexity(), 1);
+        assert!(!leaf.has_conditionals());
+    }
+
+    #[test]
+    fn test_node_shape_metrics_binary_op() {
+        let node = ComputationNode::binary_op(
+            ComputationNode::leaf(|| 1.0),
+            ComputationNode::leaf(|| 2.0),
+            BinaryOperation::Add,
+        );
+        assert_eq!(node.node_count(), 3);
+        assert_eq!(node.depth(), 2);
+        assert_eq!(node.compute_complexity(), 4);
+        assert!(!node.has_conditionals());
+    }
+
+    #[test]
+    fn test_node_shape_metrics_unary_op() {
+        let node = ComputationNode::map(ComputationNode::leaf(|| 1.0), |x| x * 2.0);
+        assert_eq!(node.node_count(), 2);
+        assert_eq!(node.depth(), 2);
+        assert_eq!(node.compute_complexity(), 2);
+        assert!(!node.has_conditionals());
+    }
+
+    #[test]
+    fn test_node_shape_metrics_nested_binary_op() {
+        let inner = ComputationNode::binary_op(
+            ComputationNode::leaf(|| 1.0),
+            ComputationNode::leaf(|| 2.0),
+            BinaryOperation::Add,
+        );
+        let outer =
+            ComputationNode::binary_op(inner, ComputationNode::leaf(|| 3.0), BinaryOperation::Mul);
+        assert_eq!(outer.node_count(), 5);
+        assert_eq!(outer.depth(), 3);
+        assert_eq!(outer.compute_complexity(), 7);
+    }
+
+    #[test]
+    fn test_node_shape_metrics_conditional() {
+        let node = ComputationNode::conditional(
+            ComputationNode::leaf(|| true),
+            ComputationNode::leaf(|| 1.0),
+            ComputationNode::leaf(|| 2.0),
+        );
+        assert_eq!(node.node_count(), 4);
+        assert_eq!(node.depth(), 2);
+        assert_eq!(node.compute_complexity(), 8);
+        assert!(node.has_conditionals());
+    }
+
+    #[test]
+    fn test_has_conditionals_propagates_through_binary_op() {
+        // Left is a conditional (true), right is a plain leaf (false): only `||`
+        // (not `&&`) makes this observably true.
+        let conditional = ComputationNode::conditional(
+            ComputationNode::leaf(|| true),
+            ComputationNode::leaf(|| 1.0),
+            ComputationNode::leaf(|| 2.0),
+        );
+        let wrapped = ComputationNode::binary_op(
+            conditional,
+            ComputationNode::leaf(|| 3.0),
+            BinaryOperation::Add,
+        );
+        assert!(wrapped.has_conditionals());
+    }
+
+    #[test]
+    fn test_check_addition_identities_both_orders_and_no_match() {
+        let x = ComputationNode::leaf(|| 5.0);
+        let zero = ComputationNode::leaf(|| 0.0);
+        let nonzero = ComputationNode::leaf(|| 3.0);
+        // The "x + 0" arm matches whenever the RIGHT side is a Leaf, regardless
+        // of the left side, so it shadows the "0 + x" arm unless the right side
+        // is something other than a Leaf.
+        let non_leaf = ComputationNode::binary_op(x.clone(), nonzero.clone(), BinaryOperation::Add);
+
+        // x + 0 = x
+        assert!(GraphOptimizer::check_addition_identities(&x, &zero).is_some());
+        // 0 + x = x
+        assert!(GraphOptimizer::check_addition_identities(&zero, &non_leaf).is_some());
+        // neither side is zero: no identity applies
+        assert!(GraphOptimizer::check_addition_identities(&x, &nonzero).is_none());
+        // left is a Leaf but not zero, right is not a Leaf: the "0 + x" arm's
+        // guard must actually check is_constant_zero, not always match.
+        assert!(GraphOptimizer::check_addition_identities(&nonzero, &non_leaf).is_none());
+    }
+
+    #[test]
+    fn test_check_subtraction_identities_match_and_no_match() {
+        let x = ComputationNode::leaf(|| 5.0);
+        let zero = ComputationNode::leaf(|| 0.0);
+        let nonzero = ComputationNode::leaf(|| 3.0);
+
+        // x - 0 = x
+        assert!(GraphOptimizer::check_subtraction_identities(&x, &zero).is_some());
+        assert!(GraphOptimizer::check_subtraction_identities(&x, &nonzero).is_none());
+    }
+
+    #[test]
+    fn test_check_multiplication_identities_all_orders_and_no_match() {
+        let x = ComputationNode::leaf(|| 5.0);
+        let zero = ComputationNode::leaf(|| 0.0);
+        let one = ComputationNode::leaf(|| 1.0);
+        let nonzero = ComputationNode::leaf(|| 3.0);
+        // Same arm-shadowing consideration as addition: the "x op leaf" arms
+        // match whenever the right side is a Leaf, so the "leaf op x" arms
+        // need a non-Leaf right side to be reachable.
+        let non_leaf = ComputationNode::binary_op(x.clone(), nonzero.clone(), BinaryOperation::Add);
+
+        // x * 0 = 0
+        assert!(GraphOptimizer::check_multiplication_identities(&x, &zero).is_some());
+        // 0 * x = 0
+        assert!(GraphOptimizer::check_multiplication_identities(&zero, &non_leaf).is_some());
+        // x * 1 = x
+        assert!(GraphOptimizer::check_multiplication_identities(&x, &one).is_some());
+        // 1 * x = x
+        assert!(GraphOptimizer::check_multiplication_identities(&one, &non_leaf).is_some());
+        // no identity
+        assert!(GraphOptimizer::check_multiplication_identities(&x, &nonzero).is_none());
+        // left is a Leaf but neither zero nor one, right is not a Leaf: both
+        // the "0 * x" and "1 * x" arms' guards must actually check their
+        // respective is_constant_zero/is_constant_one, not always match.
+        assert!(GraphOptimizer::check_multiplication_identities(&nonzero, &non_leaf).is_none());
+    }
+
+    #[test]
+    fn test_check_division_identities_match_and_no_match() {
+        let x = ComputationNode::leaf(|| 5.0);
+        let one = ComputationNode::leaf(|| 1.0);
+        let nonzero = ComputationNode::leaf(|| 3.0);
+
+        // x / 1 = x
+        assert!(GraphOptimizer::check_division_identities(&x, &one).is_some());
+        assert!(GraphOptimizer::check_division_identities(&x, &nonzero).is_none());
+    }
+
+    #[test]
+    fn test_is_constant_zero_and_one() {
+        let zero_fn: Arc<dyn Fn() -> f64 + Send + Sync> = Arc::new(|| 0.0);
+        let one_fn: Arc<dyn Fn() -> f64 + Send + Sync> = Arc::new(|| 1.0);
+
+        assert!(GraphOptimizer::is_constant_zero(&zero_fn));
+        assert!(!GraphOptimizer::is_constant_zero(&one_fn));
+        assert!(GraphOptimizer::is_constant_one(&one_fn));
+        assert!(!GraphOptimizer::is_constant_one(&zero_fn));
+    }
+
+    #[test]
+    fn test_is_constant_generic() {
+        let const_fn: Arc<dyn Fn() -> f64 + Send + Sync> = Arc::new(|| 7.0);
+        assert!(GraphOptimizer::is_constant(&const_fn));
+
+        let counter = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
+        let counter2 = counter.clone();
+        let varying_fn: Arc<dyn Fn() -> f64 + Send + Sync> =
+            Arc::new(move || counter2.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
+        assert!(!GraphOptimizer::is_constant(&varying_fn));
+    }
+
+    #[test]
+    fn test_is_constant_bool() {
+        let const_fn: Arc<dyn Fn() -> bool + Send + Sync> = Arc::new(|| true);
+        assert!(GraphOptimizer::is_constant_bool(&const_fn));
+
+        let toggle = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let toggle2 = toggle.clone();
+        let varying_fn: Arc<dyn Fn() -> bool + Send + Sync> =
+            Arc::new(move || toggle2.fetch_xor(true, std::sync::atomic::Ordering::Relaxed));
+        assert!(!GraphOptimizer::is_constant_bool(&varying_fn));
+    }
+
+    #[test]
+    fn test_to_dot_node_ids_increment_sequentially() {
+        // If add_node_to_dot's `*node_id += 1` regressed to `*= 1`, every node
+        // would be assigned id 0 instead of sequential ids.
+        let left = ComputationNode::leaf(|| 1.0);
+        let right = ComputationNode::leaf(|| 2.0);
+        let add = ComputationNode::binary_op(left, right, BinaryOperation::Add);
+
+        let dot = GraphVisualizer::to_dot(&add);
+
+        assert!(dot.contains("0 [label=\"Add\""));
+        assert!(dot.contains("1 [label=\"Leaf\""));
+        assert!(dot.contains("2 [label=\"Leaf\""));
+        assert!(dot.contains("0 -> 1;"));
+        assert!(dot.contains("0 -> 2;"));
+    }
+
+    #[test]
+    fn test_profiler_get_stats_average_matches_total_over_count() {
+        let mut profiler = GraphProfiler::new();
+        profiler.profile_execution("op", || 1 + 1);
+        profiler.profile_execution("op", || 2 + 2);
+        profiler.profile_execution("op", || 3 + 3);
+
+        let stats = profiler.get_stats("op").unwrap();
+        assert_eq!(stats.count, 3);
+        // Independently recompute the average/count relationship; catches
+        // `average = total / count` regressing to `total * count`.
+        assert_eq!(
+            stats.average,
+            stats.total / u32::try_from(stats.count).unwrap()
+        );
+    }
 }
