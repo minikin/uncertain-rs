@@ -432,7 +432,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let bernoulli = Uncertain::bernoulli(0.7);
+    /// let bernoulli = Uncertain::bernoulli(0.7).unwrap();
     /// let histogram = bernoulli.histogram(1000);
     /// // Should show roughly 700 true, 300 false
     /// ```
@@ -457,7 +457,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let uniform_coin = Uncertain::bernoulli(0.5);
+    /// let uniform_coin = Uncertain::bernoulli(0.5).unwrap();
     /// let entropy = uniform_coin.entropy(1000);
     /// // Should be close to 1.0 bit for fair coin
     /// ```
@@ -495,7 +495,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
     /// let stats = normal.lazy_stats(1000);
     ///
     /// // All of these reuse the same 1000 samples:
@@ -528,7 +528,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(5.0, 1.0);
+    /// let normal = Uncertain::normal(5.0, 1.0).unwrap();
     /// let mut progressive = Uncertain::<f64>::progressive_stats();
     ///
     /// // Add samples incrementally
@@ -551,7 +551,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let stats = normal.compute_stats_batch(1000);
     ///
     /// println!("Mean: {}, Std Dev: {}, Range: {}",
@@ -588,7 +588,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
     /// let mean = normal.expected_value(1000);
     /// // Should be approximately 10.0
     ///
@@ -620,7 +620,7 @@ where
     /// use uncertain_rs::Uncertain;
     /// use uncertain_rs::computation::AdaptiveSampling;
     ///
-    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
     /// let config = AdaptiveSampling::default();
     /// let mean = normal.expected_value_adaptive(&config);
     /// // Should be approximately 10.0 with optimal sample count
@@ -654,7 +654,7 @@ where
     /// use uncertain_rs::Uncertain;
     /// use uncertain_rs::computation::AdaptiveSampling;
     ///
-    /// let normal = Uncertain::normal(10.0, 2.0);
+    /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
     /// let config = AdaptiveSampling::default();
     /// let lazy_stats = normal.adaptive_lazy_stats(&config);
     ///
@@ -677,7 +677,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 2.0);
+    /// let normal = Uncertain::normal(0.0, 2.0).unwrap();
     /// let variance = normal.variance(1000);
     /// // Should be approximately 4.0 (std_dev^2)
     ///
@@ -720,7 +720,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 2.0);
+    /// let normal = Uncertain::normal(0.0, 2.0).unwrap();
     /// let std_dev = normal.standard_deviation(1000);
     /// // Should be approximately 2.0
     ///
@@ -745,7 +745,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let skewness = normal.skewness(1000);
     /// // Should be approximately 0 for normal distribution
     /// ```
@@ -782,7 +782,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let kurtosis = normal.kurtosis(1000);
     /// // Should be approximately 0 for normal distribution (excess kurtosis)
     /// ```
@@ -829,7 +829,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(100.0, 15.0);
+    /// let normal = Uncertain::normal(100.0, 15.0).unwrap();
     /// let (lower, upper) = normal.confidence_interval(0.95, 1000);
     /// // 95% of values should fall between lower and upper
     ///
@@ -868,7 +868,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let prob = normal.cdf(0.0, 1000);
     /// // Should be approximately 0.5 for standard normal at 0
     /// ```
@@ -896,7 +896,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let median = normal.quantile(0.5, 1000);
     /// // Should be approximately 0.0 for standard normal
     ///
@@ -946,7 +946,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let iqr = normal.interquartile_range(1000);
     /// // IQR for standard normal is approximately 1.35
     /// ```
@@ -967,7 +967,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let mad = normal.median_absolute_deviation(1000);
     /// ```
     #[must_use]
@@ -997,7 +997,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let density = normal.pdf_kde(0.0, 1000, 0.1);
     /// ```
     #[must_use]
@@ -1023,7 +1023,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let log_likelihood = normal.log_likelihood(0.0, 1000, 0.1);
     /// ```
     #[must_use]
@@ -1042,8 +1042,8 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let x = Uncertain::normal(0.0, 1.0);
-    /// let y = x.map(|v| v * 2.0 + Uncertain::normal(0.0, 0.5).sample());
+    /// let x = Uncertain::normal(0.0, 1.0).unwrap();
+    /// let y = x.map(|v| v * 2.0 + Uncertain::normal(0.0, 0.5).unwrap().sample());
     /// let correlation = x.correlation(&y, 1000);
     /// // Should be positive correlation
     /// ```
@@ -1080,21 +1080,21 @@ mod tests {
 
     #[test]
     fn test_expected_value() {
-        let normal = Uncertain::normal(10.0, 1.0);
+        let normal = Uncertain::normal(10.0, 1.0).unwrap();
         let mean = normal.expected_value(1000);
         assert!((mean - 10.0).abs() < 0.2);
     }
 
     #[test]
     fn test_standard_deviation() {
-        let normal = Uncertain::normal(0.0, 2.0);
+        let normal = Uncertain::normal(0.0, 2.0).unwrap();
         let std_dev = normal.standard_deviation(1000);
         assert!((std_dev - 2.0).abs() < 0.3);
     }
 
     #[test]
     fn test_confidence_interval() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let (lower, upper) = normal.confidence_interval(0.95, 1000);
 
         // For standard normal, 95% CI should be approximately [-1.96, 1.96]
@@ -1104,7 +1104,7 @@ mod tests {
 
     #[test]
     fn test_cdf() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let prob = normal.cdf(0.0, 1000);
 
         // For standard normal, P(X <= 0) should be approximately 0.5
@@ -1113,7 +1113,7 @@ mod tests {
 
     #[test]
     fn test_quantile() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let median = normal.quantile(0.5, 1000);
 
         // Median of standard normal should be approximately 0
@@ -1135,13 +1135,13 @@ mod tests {
 
     #[test]
     fn test_entropy() {
-        let fair_coin = Uncertain::bernoulli(0.5);
+        let fair_coin = Uncertain::bernoulli(0.5).unwrap();
         let entropy = fair_coin.entropy(1000);
 
         // Fair coin should have entropy close to 1 bit
         assert!((entropy - 1.0).abs() < 0.1);
 
-        let biased_coin = Uncertain::bernoulli(0.9);
+        let biased_coin = Uncertain::bernoulli(0.9).unwrap();
         let biased_entropy = biased_coin.entropy(1000);
 
         // Biased coin should have lower entropy
@@ -1150,7 +1150,7 @@ mod tests {
 
     #[test]
     fn test_skewness_normal() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let skewness = normal.skewness(1000);
 
         // Normal distribution should have skewness close to 0
@@ -1159,7 +1159,7 @@ mod tests {
 
     #[test]
     fn test_kurtosis_normal() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let kurtosis = normal.kurtosis(1000);
 
         // Normal distribution should have excess kurtosis close to 0
@@ -1190,7 +1190,7 @@ mod tests {
 
     #[test]
     fn test_histogram_bernoulli() {
-        let bernoulli = Uncertain::bernoulli(0.3);
+        let bernoulli = Uncertain::bernoulli(0.3).unwrap();
         let histogram = bernoulli.histogram(1000);
 
         let true_count = histogram.get(&true).copied().unwrap_or(0);
@@ -1205,7 +1205,7 @@ mod tests {
 
     #[test]
     fn test_variance_standalone() {
-        let normal = Uncertain::normal(5.0, 3.0);
+        let normal = Uncertain::normal(5.0, 3.0).unwrap();
         let variance = normal.variance(1000);
         assert!((variance - 9.0).abs() < 1.5);
     }
@@ -1233,7 +1233,7 @@ mod tests {
 
     #[test]
     fn test_pdf_kde() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let density_at_mean = normal.pdf_kde(0.0, 1000, 0.1);
         let density_at_tail = normal.pdf_kde(3.0, 1000, 0.1);
 
@@ -1244,7 +1244,7 @@ mod tests {
 
     #[test]
     fn test_log_likelihood() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let ll_at_mean = normal.log_likelihood(0.0, 1000, 0.1);
         let ll_at_tail = normal.log_likelihood(3.0, 1000, 0.1);
 
@@ -1325,8 +1325,8 @@ mod tests {
 
     #[test]
     fn test_correlation_independent() {
-        let x = Uncertain::normal(0.0, 1.0);
-        let y = Uncertain::normal(10.0, 1.0);
+        let x = Uncertain::normal(0.0, 1.0).unwrap();
+        let y = Uncertain::normal(10.0, 1.0).unwrap();
         let correlation = x.correlation(&y, 1000);
 
         assert!(correlation.abs() < 0.2);
@@ -1335,7 +1335,7 @@ mod tests {
     #[test]
     fn test_correlation_zero_variance() {
         let x = Uncertain::new(|| 5.0);
-        let y = Uncertain::normal(0.0, 1.0);
+        let y = Uncertain::normal(0.0, 1.0).unwrap();
         let correlation = x.correlation(&y, 1000);
 
         assert!(correlation.abs() < f64::EPSILON);
@@ -1343,7 +1343,7 @@ mod tests {
 
     #[test]
     fn test_interquartile_range() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let iqr = normal.interquartile_range(1000);
 
         assert!(iqr > 1.0);
@@ -1352,7 +1352,7 @@ mod tests {
 
     #[test]
     fn test_median_absolute_deviation() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let mad = normal.median_absolute_deviation(1000);
 
         assert!(mad > 0.5);
@@ -1361,7 +1361,7 @@ mod tests {
 
     #[test]
     fn test_quantile_extremes() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let min_quantile = normal.quantile(0.0, 1000);
         let max_quantile = normal.quantile(1.0, 1000);
 
@@ -1372,7 +1372,7 @@ mod tests {
 
     #[test]
     fn test_cdf_extremes() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let prob_low = normal.cdf(-5.0, 1000);
         let prob_high = normal.cdf(5.0, 1000);
 
@@ -1383,7 +1383,7 @@ mod tests {
 
     #[test]
     fn test_confidence_interval_different_levels() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let (lower_90, upper_90) = normal.confidence_interval(0.90, 1000);
         let (lower_99, upper_99) = normal.confidence_interval(0.99, 1000);
 
@@ -1422,7 +1422,7 @@ mod tests {
 
     #[test]
     fn test_statistical_consistency() {
-        let normal = Uncertain::normal(10.0, 2.0);
+        let normal = Uncertain::normal(10.0, 2.0).unwrap();
 
         let mean = normal.expected_value(2000);
         let median = normal.quantile(0.5, 2000);
@@ -1437,7 +1437,7 @@ mod tests {
 
     #[test]
     fn test_lazy_stats_basic() {
-        let normal = Uncertain::normal(5.0, 2.0);
+        let normal = Uncertain::normal(5.0, 2.0).unwrap();
         let lazy_stats = normal.lazy_stats(1000);
 
         let mean = lazy_stats.mean();
@@ -1452,7 +1452,7 @@ mod tests {
 
     #[test]
     fn test_lazy_stats_sample_reuse() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let lazy_stats = normal.lazy_stats(100);
 
         // First call should generate samples
@@ -1506,7 +1506,7 @@ mod tests {
 
     #[test]
     fn test_compute_stats_batch() {
-        let normal = Uncertain::normal(10.0, 2.0);
+        let normal = Uncertain::normal(10.0, 2.0).unwrap();
         let batch_stats = normal.compute_stats_batch(1000);
 
         assert!(batch_stats.count() == 1000);
@@ -1517,7 +1517,7 @@ mod tests {
 
     #[test]
     fn test_adaptive_lazy_stats_convergence() {
-        let normal = Uncertain::normal(5.0, 1.0);
+        let normal = Uncertain::normal(5.0, 1.0).unwrap();
         let config = AdaptiveSampling {
             min_samples: 50,
             max_samples: 500,
@@ -1546,7 +1546,7 @@ mod tests {
 
     #[test]
     fn test_lazy_stats_with_quantiles() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let lazy_stats = normal.lazy_stats(1000);
 
         let median = lazy_stats.quantile(0.5);
@@ -1572,7 +1572,7 @@ mod tests {
 
     #[test]
     fn test_lazy_stats_debug_and_clone() {
-        let normal = Uncertain::normal(1.0, 1.0);
+        let normal = Uncertain::normal(1.0, 1.0).unwrap();
         let lazy_stats = normal.lazy_stats(100);
 
         let debug_str = format!("{lazy_stats:?}");
@@ -1626,7 +1626,7 @@ mod tests {
 
     #[test]
     fn test_caching_behavior() {
-        let normal = Uncertain::normal(5.0, 1.0);
+        let normal = Uncertain::normal(5.0, 1.0).unwrap();
 
         // With the new lazy evaluation design, each method call creates its own LazyStats,
         // so values won't be bitwise identical. However, they should be statistically close.
@@ -1651,7 +1651,7 @@ mod tests {
 
     #[test]
     fn test_large_sample_counts() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let mean = normal.expected_value(10000);
         let std_dev = normal.standard_deviation(10000);
 

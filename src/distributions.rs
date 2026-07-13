@@ -9,6 +9,66 @@ use rand::rng;
 use std::collections::HashMap;
 use std::f64::consts::PI;
 
+fn validate_finite(name: &'static str, value: f64) -> Result<()> {
+    if value.is_finite() {
+        Ok(())
+    } else {
+        Err(UncertainError::non_finite(name, value))
+    }
+}
+
+fn validate_positive(name: &'static str, value: f64) -> Result<()> {
+    validate_finite(name, value)?;
+    if value > 0.0 {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_parameter(
+            name,
+            value,
+            "must be positive",
+        ))
+    }
+}
+
+fn validate_non_negative(name: &'static str, value: f64) -> Result<()> {
+    validate_finite(name, value)?;
+    if value >= 0.0 {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_parameter(
+            name,
+            value,
+            "must be non-negative",
+        ))
+    }
+}
+
+fn validate_unit_interval(name: &'static str, value: f64) -> Result<()> {
+    validate_finite(name, value)?;
+    if (0.0..=1.0).contains(&value) {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_parameter(
+            name,
+            value,
+            "must be in [0, 1]",
+        ))
+    }
+}
+
+fn validate_left_open_unit_interval(name: &'static str, value: f64) -> Result<()> {
+    validate_finite(name, value)?;
+    if value > 0.0 && value <= 1.0 {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_parameter(
+            name,
+            value,
+            "must be in (0, 1]",
+        ))
+    }
+}
+
 impl<T> Uncertain<T>
 where
     T: Shareable,
@@ -37,16 +97,12 @@ where
     /// Returns an error if the components vector is empty or if the weights count
     /// doesn't match the components count.
     ///
-    /// # Panics
-    /// This function may panic if the components vector becomes empty after validation,
-    /// which should not happen under normal circumstances.
-    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal1 = Uncertain::normal(0.0, 1.0);
-    /// let normal2 = Uncertain::normal(5.0, 1.0);
+    /// let normal1 = Uncertain::normal(0.0, 1.0).unwrap();
+    /// let normal2 = Uncertain::normal(5.0, 1.0).unwrap();
     /// let mixture = Uncertain::mixture(
     ///     vec![normal1, normal2],
     ///     Some(vec![0.7, 0.3])
@@ -102,10 +158,6 @@ where
     /// # Errors
     /// Returns an error if the data vector is empty.
     ///
-    /// # Panics
-    /// This function may panic if the data vector becomes empty after validation,
-    /// which should not happen under normal circumstances.
-    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
@@ -120,8 +172,8 @@ where
 
         Ok(Uncertain::new(move || {
             data.choose(&mut rng())
-                .expect("Data vector should not be empty")
-                .clone()
+                .cloned()
+                .unwrap_or_else(|| data[0].clone())
         }))
     }
 }
@@ -138,11 +190,6 @@ where
     ///
     /// # Errors
     /// Returns an error if the probabilities map is empty.
-    ///
-    /// # Panics
-    /// This function may panic if the cumulative probability vector becomes empty,
-    /// which should not happen under normal circumstances since we check for empty
-    /// probabilities at the start of the function.
     ///
     /// # Example
     /// ```rust
@@ -173,13 +220,7 @@ where
         Ok(Uncertain::new(move || {
             let r: f64 = random();
             cumulative.iter().find(|(_, cum)| r <= *cum).map_or_else(
-                || {
-                    cumulative
-                        .last()
-                        .expect("Cumulative vector should not be empty")
-                        .0
-                        .clone()
-                },
+                || cumulative[cumulative.len() - 1].0.clone(),
                 |(val, _)| val.clone(),
             )
         }))
@@ -192,17 +233,26 @@ impl Uncertain<f64> {
     ///
     /// # Arguments
     /// * `mean` - The mean of the distribution
-    /// * `std_dev` - The standard deviation
+    /// * `std_dev` - The standard deviation (must be non-negative; `0.0` degenerates to a
+    ///   point mass at `mean`)
+    ///
+    /// # Errors
+    /// Returns an error if `mean` or `std_dev` is not finite, or if `std_dev` is negative.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0); // Standard normal
-    /// let measurement = Uncertain::normal(100.0, 5.0); // Measurement with error
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap(); // Standard normal
+    /// let measurement = Uncertain::normal(100.0, 5.0).unwrap(); // Measurement with error
     /// ```
-    #[must_use]
-    pub fn normal(mean: f64, std_dev: f64) -> Self {
+    pub fn normal(mean: f64, std_dev: f64) -> Result<Self> {
+        validate_finite("mean", mean)?;
+        validate_non_negative("std_dev", std_dev)?;
+        Ok(Self::normal_unchecked(mean, std_dev))
+    }
+
+    fn normal_unchecked(mean: f64, std_dev: f64) -> Self {
         Uncertain::new(move || {
             // Box-Muller transform for normal distribution
             let u1: f64 = random::<f64>().clamp(0.001, 0.999);
@@ -214,66 +264,93 @@ impl Uncertain<f64> {
 
     /// Creates a uniform distribution
     ///
+    /// # Arguments
+    /// * `min` - The lower bound (inclusive)
+    /// * `max` - The upper bound (inclusive); must be `>= min`. `min == max` degenerates
+    ///   to a point mass.
+    ///
+    /// # Errors
+    /// Returns an error if `min` or `max` is not finite, or if `min > max`.
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let uniform = Uncertain::uniform(0.0, 10.0);
+    /// let uniform = Uncertain::uniform(0.0, 10.0).unwrap();
     /// ```
-    #[must_use]
-    pub fn uniform(min: f64, max: f64) -> Self {
-        Uncertain::new(move || min + (max - min) * random::<f64>())
+    pub fn uniform(min: f64, max: f64) -> Result<Self> {
+        validate_finite("min", min)?;
+        validate_finite("max", max)?;
+        if min > max {
+            return Err(UncertainError::invalid_parameter(
+                "min",
+                min,
+                "must be less than or equal to max",
+            ));
+        }
+        Ok(Uncertain::new(move || min + (max - min) * random::<f64>()))
     }
 
     /// Creates an exponential distribution
     ///
     /// # Arguments
-    /// * `rate` - The rate parameter (lambda)
+    /// * `rate` - The rate parameter (lambda), must be positive
+    ///
+    /// # Errors
+    /// Returns an error if `rate` is not finite or not positive.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let exponential = Uncertain::exponential(1.0);
+    /// let exponential = Uncertain::exponential(1.0).unwrap();
     /// ```
-    #[must_use]
-    pub fn exponential(rate: f64) -> Self {
-        Uncertain::new(move || -random::<f64>().ln() / rate)
+    pub fn exponential(rate: f64) -> Result<Self> {
+        validate_positive("rate", rate)?;
+        Ok(Uncertain::new(move || -random::<f64>().ln() / rate))
     }
 
     /// Creates a log-normal distribution
     ///
     /// # Arguments
     /// * `mu` - Mean of the underlying normal distribution
-    /// * `sigma` - Standard deviation of the underlying normal distribution
+    /// * `sigma` - Standard deviation of the underlying normal distribution (must be
+    ///   non-negative; `0.0` degenerates to a point mass at `exp(mu)`)
+    ///
+    /// # Errors
+    /// Returns an error if `mu` or `sigma` is not finite, or if `sigma` is negative.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let lognormal = Uncertain::log_normal(0.0, 1.0);
+    /// let lognormal = Uncertain::log_normal(0.0, 1.0).unwrap();
     /// ```
-    #[must_use]
-    pub fn log_normal(mu: f64, sigma: f64) -> Self {
-        let normal = Self::normal(mu, sigma);
-        normal.map(f64::exp)
+    pub fn log_normal(mu: f64, sigma: f64) -> Result<Self> {
+        validate_finite("mu", mu)?;
+        validate_non_negative("sigma", sigma)?;
+        Ok(Self::normal_unchecked(mu, sigma).map(f64::exp))
     }
 
     /// Creates a beta distribution
     ///
     /// # Arguments
-    /// * `alpha` - First shape parameter
-    /// * `beta` - Second shape parameter
+    /// * `alpha` - First shape parameter, must be positive
+    /// * `beta` - Second shape parameter, must be positive
+    ///
+    /// # Errors
+    /// Returns an error if `alpha` or `beta` is not finite or not positive.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let beta = Uncertain::beta(2.0, 5.0);
+    /// let beta = Uncertain::beta(2.0, 5.0).unwrap();
     /// ```
-    #[must_use]
-    pub fn beta(alpha: f64, beta: f64) -> Self {
-        Uncertain::new(move || {
+    pub fn beta(alpha: f64, beta: f64) -> Result<Self> {
+        validate_positive("alpha", alpha)?;
+        validate_positive("beta", beta)?;
+        Ok(Uncertain::new(move || {
             // Using rejection sampling method
             loop {
                 let u1: f64 = random();
@@ -286,23 +363,33 @@ impl Uncertain<f64> {
                     return x / (x + y);
                 }
             }
-        })
+        }))
     }
 
     /// Creates a gamma distribution
     ///
     /// # Arguments
-    /// * `shape` - Shape parameter (alpha)
-    /// * `scale` - Scale parameter (beta)
+    /// * `shape` - Shape parameter (alpha), must be positive
+    /// * `scale` - Scale parameter (beta), must be non-negative (`0.0` degenerates to a
+    ///   point mass at `0.0`)
+    ///
+    /// # Errors
+    /// Returns an error if `shape` is not finite or not positive, or if `scale` is not
+    /// finite or negative.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let gamma = Uncertain::gamma(2.0, 1.0);
+    /// let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
     /// ```
-    #[must_use]
-    pub fn gamma(shape: f64, scale: f64) -> Self {
+    pub fn gamma(shape: f64, scale: f64) -> Result<Self> {
+        validate_positive("shape", shape)?;
+        validate_non_negative("scale", scale)?;
+        Ok(Self::gamma_unchecked(shape, scale))
+    }
+
+    fn gamma_unchecked(shape: f64, scale: f64) -> Self {
         Uncertain::new(move || {
             // Marsaglia and Tsang method for shape >= 1
             if shape >= 1.0 {
@@ -310,7 +397,7 @@ impl Uncertain<f64> {
                 let c = 1.0 / (9.0 * d).sqrt();
 
                 loop {
-                    let normal_sample = Self::normal(0.0, 1.0).sample();
+                    let normal_sample = Self::normal_unchecked(0.0, 1.0).sample();
                     let v = (1.0 + c * normal_sample).powi(3);
 
                     if v > 0.0 {
@@ -325,7 +412,7 @@ impl Uncertain<f64> {
                 }
             } else {
                 // For shape < 1, use transformation
-                let gamma_1_plus_shape = Self::gamma(shape + 1.0, scale).sample();
+                let gamma_1_plus_shape = Self::gamma_unchecked(shape + 1.0, scale).sample();
                 let u: f64 = random();
                 gamma_1_plus_shape * u.powf(1.0 / shape)
             }
@@ -338,17 +425,20 @@ impl Uncertain<bool> {
     /// Creates a Bernoulli distribution
     ///
     /// # Arguments
-    /// * `probability` - Probability of success (true)
+    /// * `probability` - Probability of success (true), must be in `[0, 1]`
+    ///
+    /// # Errors
+    /// Returns an error if `probability` is not finite or outside `[0, 1]`.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let biased_coin = Uncertain::bernoulli(0.7); // 70% chance of true
+    /// let biased_coin = Uncertain::bernoulli(0.7).unwrap(); // 70% chance of true
     /// ```
-    #[must_use]
-    pub fn bernoulli(probability: f64) -> Self {
-        Uncertain::new(move || random::<f64>() < probability)
+    pub fn bernoulli(probability: f64) -> Result<Self> {
+        validate_unit_interval("probability", probability)?;
+        Ok(Uncertain::new(move || random::<f64>() < probability))
     }
 }
 
@@ -368,17 +458,20 @@ where
     ///
     /// # Arguments
     /// * `trials` - Number of trials
-    /// * `probability` - Probability of success on each trial
+    /// * `probability` - Probability of success on each trial, must be in `[0, 1]`
+    ///
+    /// # Errors
+    /// Returns an error if `probability` is not finite or outside `[0, 1]`.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let binomial: Uncertain<u32> = Uncertain::binomial(100, 0.3);
+    /// let binomial: Uncertain<u32> = Uncertain::binomial(100, 0.3).unwrap();
     /// ```
-    #[must_use]
-    pub fn binomial(trials: u32, probability: f64) -> Self {
-        Uncertain::new(move || {
+    pub fn binomial(trials: u32, probability: f64) -> Result<Self> {
+        validate_unit_interval("probability", probability)?;
+        Ok(Uncertain::new(move || {
             let mut count = T::default();
             for _ in 0..trials {
                 if random::<f64>() < probability {
@@ -386,23 +479,27 @@ where
                 }
             }
             count
-        })
+        }))
     }
 
     /// Creates a Poisson distribution
     ///
     /// # Arguments
-    /// * `lambda` - Rate parameter
+    /// * `lambda` - Rate parameter, must be non-negative (`0.0` degenerates to a point
+    ///   mass at `0`)
+    ///
+    /// # Errors
+    /// Returns an error if `lambda` is not finite or negative.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let poisson: Uncertain<u32> = Uncertain::poisson(3.5);
+    /// let poisson: Uncertain<u32> = Uncertain::poisson(3.5).unwrap();
     /// ```
-    #[must_use]
-    pub fn poisson(lambda: f64) -> Self {
-        Uncertain::new(move || {
+    pub fn poisson(lambda: f64) -> Result<Self> {
+        validate_non_negative("lambda", lambda)?;
+        Ok(Uncertain::new(move || {
             let l = (-lambda).exp();
             let mut k = T::from(0);
             let mut p = 1.0;
@@ -417,29 +514,33 @@ where
 
             // Return k - 1 per Knuth's algorithm
             k - T::from(1)
-        })
+        }))
     }
 
     /// Creates a geometric distribution
     ///
     /// # Arguments
-    /// * `probability` - Probability of success on each trial
+    /// * `probability` - Probability of success on each trial, must be in `(0, 1]`
+    ///   (`0.0` would never terminate)
+    ///
+    /// # Errors
+    /// Returns an error if `probability` is not finite or outside `(0, 1]`.
     ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let geometric: Uncertain<u32> = Uncertain::geometric(0.1);
+    /// let geometric: Uncertain<u32> = Uncertain::geometric(0.1).unwrap();
     /// ```
-    #[must_use]
-    pub fn geometric(probability: f64) -> Self {
-        Uncertain::new(move || {
+    pub fn geometric(probability: f64) -> Result<Self> {
+        validate_left_open_unit_interval("probability", probability)?;
+        Ok(Uncertain::new(move || {
             let mut trials = T::from(1);
             while random::<f64>() >= probability {
                 trials += T::from(1);
             }
             trials
-        })
+        }))
     }
 }
 
@@ -449,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_normal_distribution() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let samples: Vec<f64> = normal.take_samples(1000);
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
         assert!((mean - 0.0).abs() < 0.1);
@@ -457,14 +558,14 @@ mod tests {
 
     #[test]
     fn test_uniform_distribution() {
-        let uniform = Uncertain::uniform(0.0, 10.0);
+        let uniform = Uncertain::uniform(0.0, 10.0).unwrap();
         let samples: Vec<f64> = uniform.take_samples(1000);
         assert!(samples.iter().all(|&x| (0.0..=10.0).contains(&x)));
     }
 
     #[test]
     fn test_bernoulli_distribution() {
-        let bernoulli = Uncertain::bernoulli(0.7);
+        let bernoulli = Uncertain::bernoulli(0.7).unwrap();
         let samples: Vec<bool> = bernoulli.take_samples(1000);
         let true_ratio = samples.iter().filter(|&&x| x).count() as f64 / samples.len() as f64;
         assert!((true_ratio - 0.7).abs() < 0.1);
@@ -494,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_exponential_distribution() {
-        let exponential = Uncertain::exponential(2.0);
+        let exponential = Uncertain::exponential(2.0).unwrap();
         let samples: Vec<f64> = exponential.take_samples(1000);
 
         assert!(samples.iter().all(|&x| x >= 0.0));
@@ -505,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_log_normal_distribution() {
-        let log_normal = Uncertain::log_normal(0.0, 1.0);
+        let log_normal = Uncertain::log_normal(0.0, 1.0).unwrap();
         let samples: Vec<f64> = log_normal.take_samples(1000);
 
         assert!(samples.iter().all(|&x| x > 0.0));
@@ -513,7 +614,7 @@ mod tests {
 
     #[test]
     fn test_beta_distribution() {
-        let beta = Uncertain::beta(2.0, 5.0);
+        let beta = Uncertain::beta(2.0, 5.0).unwrap();
         let samples: Vec<f64> = beta.take_samples(1000);
 
         assert!(samples.iter().all(|&x| (0.0..=1.0).contains(&x)));
@@ -521,7 +622,7 @@ mod tests {
 
     #[test]
     fn test_gamma_distribution() {
-        let gamma = Uncertain::gamma(2.0, 1.0);
+        let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
         let samples: Vec<f64> = gamma.take_samples(1000);
 
         assert!(samples.iter().all(|&x| x >= 0.0));
@@ -529,7 +630,7 @@ mod tests {
 
     #[test]
     fn test_binomial_distribution() {
-        let binomial: Uncertain<u32> = Uncertain::binomial(10, 0.5);
+        let binomial: Uncertain<u32> = Uncertain::binomial(10, 0.5).unwrap();
         let samples: Vec<u32> = binomial.take_samples(1000);
 
         assert!(samples.iter().all(|&x| x <= 10));
@@ -540,7 +641,7 @@ mod tests {
 
     #[test]
     fn test_poisson_distribution() {
-        let poisson: Uncertain<u32> = Uncertain::poisson(3.0);
+        let poisson: Uncertain<u32> = Uncertain::poisson(3.0).unwrap();
         let samples: Vec<u32> = poisson.take_samples(1000);
 
         let mean = f64::from(samples.iter().sum::<u32>()) / samples.len() as f64;
@@ -549,7 +650,7 @@ mod tests {
 
     #[test]
     fn test_geometric_distribution() {
-        let geometric: Uncertain<u32> = Uncertain::geometric(0.2);
+        let geometric: Uncertain<u32> = Uncertain::geometric(0.2).unwrap();
         let samples: Vec<u32> = geometric.take_samples(1000);
 
         assert!(samples.iter().all(|&x| x >= 1));
@@ -560,8 +661,8 @@ mod tests {
 
     #[test]
     fn test_mixture_distribution() {
-        let normal1 = Uncertain::normal(0.0, 1.0);
-        let normal2 = Uncertain::normal(10.0, 1.0);
+        let normal1 = Uncertain::normal(0.0, 1.0).unwrap();
+        let normal2 = Uncertain::normal(10.0, 1.0).unwrap();
         let mixture = Uncertain::mixture(vec![normal1, normal2], Some(vec![0.5, 0.5])).unwrap();
 
         let samples: Vec<f64> = mixture.take_samples(1000);
@@ -575,7 +676,7 @@ mod tests {
 
     #[test]
     fn test_mixture_single_component() {
-        let normal = Uncertain::normal(0.0, 1.0);
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
         let mixture = Uncertain::mixture(vec![normal], None).unwrap();
         let samples: Vec<f64> = mixture.take_samples(100);
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -584,8 +685,8 @@ mod tests {
 
     #[test]
     fn test_mixture_uniform_weights() {
-        let normal1 = Uncertain::normal(0.0, 1.0);
-        let normal2 = Uncertain::normal(5.0, 1.0);
+        let normal1 = Uncertain::normal(0.0, 1.0).unwrap();
+        let normal2 = Uncertain::normal(5.0, 1.0).unwrap();
         let mixture = Uncertain::mixture(vec![normal1, normal2], None).unwrap();
         let _samples: Vec<f64> = mixture.take_samples(100);
     }
@@ -608,8 +709,8 @@ mod tests {
 
     #[test]
     fn test_mixture_mismatched_weights() {
-        let normal1 = Uncertain::normal(0.0, 1.0);
-        let normal2 = Uncertain::normal(1.0, 1.0);
+        let normal1 = Uncertain::normal(0.0, 1.0).unwrap();
+        let normal2 = Uncertain::normal(1.0, 1.0).unwrap();
         let result = Uncertain::mixture(vec![normal1, normal2], Some(vec![0.5]));
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), UncertainError::weight_mismatch(2, 1));
@@ -645,11 +746,11 @@ mod tests {
 
     #[test]
     fn test_normal_distribution_edge_cases() {
-        let normal_zero_std = Uncertain::normal(5.0, 0.0);
+        let normal_zero_std = Uncertain::normal(5.0, 0.0).unwrap();
         let samples: Vec<f64> = normal_zero_std.take_samples(10);
         assert!(samples.iter().all(|&x| (x - 5.0).abs() < 0.01));
 
-        let normal_negative = Uncertain::normal(-10.0, 2.0);
+        let normal_negative = Uncertain::normal(-10.0, 2.0).unwrap();
         let samples: Vec<f64> = normal_negative.take_samples(1000);
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
         assert!((mean - (-10.0)).abs() < 0.5);
@@ -657,29 +758,29 @@ mod tests {
 
     #[test]
     fn test_uniform_edge_cases() {
-        let uniform_point = Uncertain::uniform(5.0, 5.0);
+        let uniform_point = Uncertain::uniform(5.0, 5.0).unwrap();
         let samples: Vec<f64> = uniform_point.take_samples(10);
         assert!(samples.iter().all(|&x| (x - 5.0).abs() < f64::EPSILON));
 
-        let uniform_negative = Uncertain::uniform(-10.0, -5.0);
+        let uniform_negative = Uncertain::uniform(-10.0, -5.0).unwrap();
         let samples: Vec<f64> = uniform_negative.take_samples(100);
         assert!(samples.iter().all(|&x| (-10.0..=-5.0).contains(&x)));
     }
 
     #[test]
     fn test_bernoulli_edge_cases() {
-        let bernoulli_false = Uncertain::bernoulli(0.0);
+        let bernoulli_false = Uncertain::bernoulli(0.0).unwrap();
         let samples: Vec<bool> = bernoulli_false.take_samples(100);
         assert!(samples.iter().all(|&x| !x));
 
-        let bernoulli_true = Uncertain::bernoulli(1.0);
+        let bernoulli_true = Uncertain::bernoulli(1.0).unwrap();
         let samples: Vec<bool> = bernoulli_true.take_samples(100);
         assert!(samples.iter().all(|&x| x));
     }
 
     #[test]
     fn test_exponential_edge_cases() {
-        let exponential_high_rate = Uncertain::exponential(100.0);
+        let exponential_high_rate = Uncertain::exponential(100.0).unwrap();
         let samples: Vec<f64> = exponential_high_rate.take_samples(100);
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
         assert!(mean < 0.1);
@@ -687,16 +788,122 @@ mod tests {
 
     #[test]
     fn test_binomial_edge_cases() {
-        let binomial_zero: Uncertain<u32> = Uncertain::binomial(0, 0.5);
+        let binomial_zero: Uncertain<u32> = Uncertain::binomial(0, 0.5).unwrap();
         let samples: Vec<u32> = binomial_zero.take_samples(10);
         assert!(samples.iter().all(|&x| x == 0));
 
-        let binomial_p_zero: Uncertain<u32> = Uncertain::binomial(10, 0.0);
+        let binomial_p_zero: Uncertain<u32> = Uncertain::binomial(10, 0.0).unwrap();
         let samples: Vec<u32> = binomial_p_zero.take_samples(10);
         assert!(samples.iter().all(|&x| x == 0));
 
-        let binomial_p_one: Uncertain<u32> = Uncertain::binomial(10, 1.0);
+        let binomial_p_one: Uncertain<u32> = Uncertain::binomial(10, 1.0).unwrap();
         let samples: Vec<u32> = binomial_p_one.take_samples(10);
         assert!(samples.iter().all(|&x| x == 10));
+    }
+
+    #[test]
+    fn test_normal_rejects_non_finite() {
+        match Uncertain::normal(f64::NAN, 1.0).unwrap_err() {
+            UncertainError::NonFiniteParameter { parameter, value } => {
+                assert_eq!(parameter, "mean");
+                assert!(value.is_nan());
+            }
+            other => panic!("expected NonFiniteParameter, got {other:?}"),
+        }
+        assert!(Uncertain::normal(0.0, f64::INFINITY).is_err());
+    }
+
+    #[test]
+    fn test_normal_rejects_negative_std_dev() {
+        let err = Uncertain::normal(0.0, -1.0).unwrap_err();
+        assert_eq!(
+            err,
+            UncertainError::invalid_parameter("std_dev", -1.0, "must be non-negative")
+        );
+    }
+
+    #[test]
+    fn test_uniform_rejects_inverted_bounds() {
+        assert!(Uncertain::uniform(10.0, 0.0).is_err());
+    }
+
+    #[test]
+    fn test_exponential_rejects_non_positive_rate() {
+        assert!(Uncertain::exponential(0.0).is_err());
+        assert!(Uncertain::exponential(-1.0).is_err());
+    }
+
+    #[test]
+    fn test_log_normal_rejects_negative_sigma() {
+        assert!(Uncertain::log_normal(0.0, -1.0).is_err());
+    }
+
+    #[test]
+    fn test_beta_rejects_non_positive_shape_parameters() {
+        assert!(Uncertain::beta(0.0, 1.0).is_err());
+        assert!(Uncertain::beta(1.0, 0.0).is_err());
+        assert!(Uncertain::beta(-1.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn test_gamma_rejects_non_positive_shape() {
+        assert!(Uncertain::gamma(0.0, 1.0).is_err());
+        assert!(Uncertain::gamma(-1.0, 1.0).is_err());
+    }
+
+    #[test]
+    fn test_gamma_rejects_negative_scale() {
+        assert!(Uncertain::gamma(1.0, -1.0).is_err());
+    }
+
+    #[test]
+    fn test_gamma_allows_zero_scale_degenerate() {
+        let gamma = Uncertain::gamma(2.0, 0.0).unwrap();
+        let samples: Vec<f64> = gamma.take_samples(10);
+        assert!(samples.iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn test_bernoulli_rejects_out_of_range_probability() {
+        assert!(Uncertain::bernoulli(-0.1).is_err());
+        assert!(Uncertain::bernoulli(1.1).is_err());
+    }
+
+    #[test]
+    fn test_binomial_rejects_out_of_range_probability() {
+        let result: Result<Uncertain<u32>> = Uncertain::binomial(10, 1.1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_poisson_rejects_negative_lambda() {
+        let result: Result<Uncertain<u32>> = Uncertain::poisson(-1.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_poisson_allows_zero_lambda_degenerate() {
+        let poisson: Uncertain<u32> = Uncertain::poisson(0.0).unwrap();
+        let samples: Vec<u32> = poisson.take_samples(10);
+        assert!(samples.iter().all(|&x| x == 0));
+    }
+
+    #[test]
+    fn test_geometric_rejects_zero_probability() {
+        let result: Result<Uncertain<u32>> = Uncertain::geometric(0.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_geometric_rejects_out_of_range_probability() {
+        let result: Result<Uncertain<u32>> = Uncertain::geometric(1.1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_geometric_allows_probability_one() {
+        let geometric: Uncertain<u32> = Uncertain::geometric(1.0).unwrap();
+        let samples: Vec<u32> = geometric.take_samples(100);
+        assert!(samples.iter().all(|&x| x == 1));
     }
 }

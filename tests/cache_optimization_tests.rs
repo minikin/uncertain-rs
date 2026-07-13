@@ -5,7 +5,7 @@ use uncertain_rs::{Uncertain, cache};
 fn test_improved_cache_hit_rates_with_quantization() {
     cache::clear_global_caches();
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     let _result1 = normal.cdf(1.0001, 1000);
     let _result2 = normal.cdf(1.0002, 1000); // Should hit cache due to quantization
@@ -22,7 +22,7 @@ fn test_improved_cache_hit_rates_with_quantization() {
 
 #[test]
 fn test_adaptive_sampling_convergence() {
-    let normal = Uncertain::normal(10.0, 2.0);
+    let normal = Uncertain::normal(10.0, 2.0).unwrap();
 
     let config = AdaptiveSampling {
         min_samples: 50,
@@ -42,7 +42,7 @@ fn test_adaptive_sampling_convergence() {
 fn test_cache_statistics_tracking() {
     cache::clear_global_caches();
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
     let stats = normal.lazy_stats(1000);
 
     let mean1 = stats.mean();
@@ -165,8 +165,8 @@ fn test_complex_computation_graph_performance() {
     cache::clear_global_caches();
 
     // Create a complex expression: (x + y) * (x - y) * (x / y) + (y ^ 2)
-    let x = Uncertain::normal(5.0, 1.0);
-    let y = Uncertain::normal(2.0, 0.5);
+    let x = Uncertain::normal(5.0, 1.0).unwrap();
+    let y = Uncertain::normal(2.0, 0.5).unwrap();
 
     let sum = x.clone() + y.clone();
     let diff = x.clone() - y.clone();
@@ -193,7 +193,7 @@ fn test_complex_computation_graph_performance() {
 fn test_cache_performance_report() {
     cache::clear_global_caches();
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     for i in 0..10 {
         let _ = normal.expected_value(100 * (i + 1));
@@ -230,7 +230,7 @@ fn test_graph_optimizer_subexpression_elimination() {
 fn test_different_precision_cache_hits() {
     cache::clear_global_caches();
 
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     // These values should map to the same quantized key
     let confidence_intervals = [

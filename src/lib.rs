@@ -12,7 +12,7 @@
 //! use uncertain_rs::Uncertain;
 //!
 //! // Create uncertain values from probability distributions
-//! let speed = Uncertain::normal(55.2, 5.0); // GPS reading with ±5 mph error
+//! let speed = Uncertain::normal(55.2, 5.0).unwrap(); // GPS reading with ±5 mph error
 //!
 //! // Evidence-based conditional (returns Uncertain<bool>)
 //! let speeding_evidence = speed.gt(60.0);

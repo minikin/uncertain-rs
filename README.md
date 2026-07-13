@@ -29,7 +29,7 @@ this library uses evidence-based conditionals that account for uncertainty:
 use uncertain_rs::Uncertain;
 
 // Create uncertain values from probability distributions
-let speed = Uncertain::normal(55.2, 5.0); // GPS reading with ±5 mph error
+let speed = Uncertain::normal(55.2, 5.0).unwrap(); // GPS reading with ±5 mph error
 
 // Evidence-based conditional (returns Uncertain<bool>)
 let speeding_evidence = speed.gt(60.0);
@@ -71,8 +71,8 @@ use uncertain_rs::Uncertain;
 
 fn main() {
     // Create uncertain values
-    let x = Uncertain::normal(5.0, 1.0);
-    let y = Uncertain::normal(3.0, 0.5);
+    let x = Uncertain::normal(5.0, 1.0).unwrap();
+    let y = Uncertain::normal(3.0, 0.5).unwrap();
 
     // Perform arithmetic operations
     let sum = x.clone() + y.clone();
@@ -92,20 +92,25 @@ For more examples, see the [examples directory](examples).
 
 ## Error Handling
 
-The library uses a custom `UncertainError` type for type-safe error handling:
+The library uses a custom `UncertainError` type for type-safe error handling. Every
+distribution constructor validates its parameters and returns `Result<Uncertain<T>,
+UncertainError>`:
 
 ```rust
 use uncertain_rs::{Uncertain, UncertainError};
 
-let result = Uncertain::<f64>::mixture(vec![], None);
+let result = Uncertain::normal(0.0, -1.0); // negative std_dev
 match result {
-    Err(UncertainError::EmptyComponents) => {
-        println!("Error: No components provided");
+    Err(UncertainError::InvalidParameter { parameter, value, constraint }) => {
+        println!("Invalid '{parameter}': {value} {constraint}");
     }
     Err(e) => println!("Error: {}", e),
     Ok(dist) => { /* use dist */ }
 }
 ```
+
+See [`examples/error_handling.rs`](examples/error_handling.rs) for a complete walkthrough,
+and [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md) if you're upgrading from a pre-0.3 release.
 
 ## Advanced Features
 
@@ -116,7 +121,7 @@ Enable the `parallel` feature to unlock multi-threaded sample generation for sig
 ```rust
 use uncertain_rs::Uncertain;
 
-let normal = Uncertain::normal(0.0, 1.0);
+let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
 // Sequential sampling
 let samples = normal.take_samples(100_000);
@@ -125,7 +130,7 @@ let samples = normal.take_samples(100_000);
 let samples_par = normal.take_samples_par(100_000); // ~2-4x faster on multi-core systems
 
 // Parallel + caching for f64 distributions
-let gamma = Uncertain::gamma(2.0, 1.0);
+let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
 let cached = gamma.take_samples_cached_par(100_000); // Fast generation + reuse
 ```
 
@@ -146,9 +151,9 @@ The library includes a computation graph optimizer that can eliminate common sub
 use uncertain_rs::{Uncertain, computation::GraphOptimizer};
 
 // Create an expression with common subexpressions
-let x = Uncertain::normal(2.0, 0.1);
-let y = Uncertain::normal(3.0, 0.1);
-let z = Uncertain::normal(1.0, 0.1);
+let x = Uncertain::normal(2.0, 0.1).unwrap();
+let y = Uncertain::normal(3.0, 0.1).unwrap();
+let z = Uncertain::normal(1.0, 0.1).unwrap();
 
 // Expression: (x + y) * (x + y) + (x + y) * z
 // The subexpression (x + y) appears 3 times

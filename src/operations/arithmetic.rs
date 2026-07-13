@@ -271,7 +271,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let base = Uncertain::normal(2.0, 0.1);
+    /// let base = Uncertain::normal(2.0, 0.1).unwrap();
     /// let squared = base.pow(2.0);
     /// ```
     #[must_use]
@@ -285,7 +285,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let positive = Uncertain::uniform(1.0, 100.0);
+    /// let positive = Uncertain::uniform(1.0, 100.0).unwrap();
     /// let sqrt_val = positive.sqrt();
     /// ```
     #[must_use]
@@ -299,7 +299,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let positive = Uncertain::uniform(0.1, 10.0);
+    /// let positive = Uncertain::uniform(0.1, 10.0).unwrap();
     /// let ln_val = positive.ln();
     /// ```
     #[must_use]
@@ -313,7 +313,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 1.0);
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
     /// let exp_val = normal.exp();
     /// ```
     #[must_use]
@@ -327,7 +327,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let normal = Uncertain::normal(0.0, 2.0);
+    /// let normal = Uncertain::normal(0.0, 2.0).unwrap();
     /// let abs_val = normal.abs();
     /// ```
     #[must_use]

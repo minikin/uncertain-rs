@@ -8,7 +8,7 @@ use uncertain_rs::Uncertain;
 
 #[test]
 fn test_parallel_sampling_produces_valid_results() {
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
     let samples = normal.take_samples_par(10_000);
 
     assert_eq!(samples.len(), 10_000);
@@ -32,7 +32,7 @@ fn test_parallel_sampling_produces_valid_results() {
 
 #[test]
 fn test_parallel_vs_sequential_statistical_consistency() {
-    let normal = Uncertain::normal(5.0, 2.0);
+    let normal = Uncertain::normal(5.0, 2.0).unwrap();
     let count = 50_000;
 
     let seq_samples = normal.take_samples(count);
@@ -94,7 +94,7 @@ fn test_parallel_vs_sequential_statistical_consistency() {
 
 #[test]
 fn test_parallel_sampling_with_transformations() {
-    let base = Uncertain::normal(10.0, 2.0);
+    let base = Uncertain::normal(10.0, 2.0).unwrap();
     let transformed = base.map(|x| x * 2.0 + 5.0);
 
     let samples = transformed.take_samples_par(10_000);
@@ -121,7 +121,7 @@ fn test_parallel_sampling_with_transformations() {
 
 #[test]
 fn test_parallel_cached_sampling() {
-    let gamma = Uncertain::gamma(2.0, 1.0);
+    let gamma = Uncertain::gamma(2.0, 1.0).unwrap();
     let count = 10_000;
 
     let samples1 = gamma.take_samples_cached_par(count);
@@ -146,7 +146,7 @@ fn test_parallel_cached_sampling() {
 fn test_parallel_sampling_different_distributions() {
     let count = 5_000;
 
-    let uniform = Uncertain::uniform(0.0, 10.0);
+    let uniform = Uncertain::uniform(0.0, 10.0).unwrap();
     let uniform_samples = uniform.take_samples_par(count);
     let uniform_mean: f64 = uniform_samples.iter().sum::<f64>() / count as f64;
     assert!(
@@ -155,7 +155,7 @@ fn test_parallel_sampling_different_distributions() {
         uniform_mean
     );
 
-    let exponential = Uncertain::exponential(2.0);
+    let exponential = Uncertain::exponential(2.0).unwrap();
     let exp_samples = exponential.take_samples_par(count);
     let exp_mean: f64 = exp_samples.iter().sum::<f64>() / count as f64;
 
@@ -167,7 +167,7 @@ fn test_parallel_sampling_different_distributions() {
     );
 
     // Beta distribution
-    let beta = Uncertain::beta(2.0, 5.0);
+    let beta = Uncertain::beta(2.0, 5.0).unwrap();
     let beta_samples = beta.take_samples_par(count);
     let beta_mean: f64 = beta_samples.iter().sum::<f64>() / count as f64;
     // Beta mean = alpha / (alpha + beta) = 2 / 7 ≈ 0.286
@@ -180,7 +180,7 @@ fn test_parallel_sampling_different_distributions() {
 
 #[test]
 fn test_parallel_sampling_empty_and_edge_cases() {
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     let empty = normal.take_samples_par(0);
     assert_eq!(empty.len(), 0);
@@ -194,7 +194,7 @@ fn test_parallel_sampling_empty_and_edge_cases() {
 
 #[test]
 fn test_parallel_sampling_with_filter() {
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
     let positive_only = normal.filter(|&x| x > 0.0);
 
     let samples = positive_only.take_samples_par(1_000);
@@ -206,7 +206,7 @@ fn test_parallel_sampling_with_filter() {
 
 #[test]
 fn test_parallel_sampling_reproducibility_not_required() {
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     let samples1 = normal.take_samples_par(1_000);
     let samples2 = normal.take_samples_par(1_000);

@@ -29,7 +29,7 @@ fn main() {
 }
 
 fn benchmark_sequential(count: usize) {
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     let start = Instant::now();
     let samples = normal.take_samples(count);
@@ -42,7 +42,7 @@ fn benchmark_sequential(count: usize) {
 
 #[cfg(feature = "parallel")]
 fn benchmark_parallel(count: usize) {
-    let normal = Uncertain::normal(0.0, 1.0);
+    let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     let start = Instant::now();
     let samples = normal.take_samples_par(count);
@@ -67,7 +67,7 @@ fn benchmark_parallel(_count: usize) {
 fn monte_carlo_integration() {
     println!("Monte Carlo Integration: Estimating π");
 
-    let uniform = Uncertain::uniform(0.0, 1.0);
+    let uniform = Uncertain::uniform(0.0, 1.0).unwrap();
     let samples = 1_000_000;
 
     // Sequential approach
@@ -115,7 +115,7 @@ fn monte_carlo_integration() {
 fn complex_transformation_example() {
     println!("\nComplex Transformation Pipeline:");
 
-    let base = Uncertain::normal(50.0, 10.0);
+    let base = Uncertain::normal(50.0, 10.0).unwrap();
 
     // Chain multiple expensive operations
     let transformed = base

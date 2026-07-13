@@ -47,7 +47,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let speed = Uncertain::normal(55.0, 5.0);
+    /// let speed = Uncertain::normal(55.0, 5.0).unwrap();
     /// let speeding_evidence = speed.gt(60.0);
     ///
     /// if speeding_evidence.probability_exceeds(0.95) {
@@ -65,7 +65,7 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let temperature = Uncertain::normal(1.0, 2.0);
+    /// let temperature = Uncertain::normal(1.0, 2.0).unwrap();
     /// let freezing_evidence = temperature.lt(0.0);
     ///
     /// if freezing_evidence.probability_exceeds(0.8) {
@@ -116,8 +116,8 @@ where
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let sensor1 = Uncertain::normal(10.0, 1.0);
-    /// let sensor2 = Uncertain::normal(12.0, 1.0);
+    /// let sensor1 = Uncertain::normal(10.0, 1.0).unwrap();
+    /// let sensor2 = Uncertain::normal(12.0, 1.0).unwrap();
     /// let evidence = sensor2.gt_uncertain(&sensor1);
     /// ```
     #[must_use]
@@ -152,7 +152,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let measurement = Uncertain::normal(10.0, 0.1);
+    /// let measurement = Uncertain::normal(10.0, 0.1).unwrap();
     /// let target = 10.0;
     /// let tolerance = 0.5;
     ///
@@ -169,7 +169,7 @@ impl Uncertain<f64> {
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
-    /// let measurement = Uncertain::normal(10.0, 2.0);
+    /// let measurement = Uncertain::normal(10.0, 2.0).unwrap();
     /// let in_range = measurement.within_range(8.0, 12.0);
     /// ```
     #[must_use]
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn test_comparison_with_uncertainty() {
-        let value = Uncertain::normal(5.0, 1.0);
+        let value = Uncertain::normal(5.0, 1.0).unwrap();
         let evidence = Comparison::gt(&value, 4.0);
 
         // With normal(5, 1), most samples should be > 4
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn test_approximate_equality() {
-        let measurement = Uncertain::normal(10.0, 0.1);
+        let measurement = Uncertain::normal(10.0, 0.1).unwrap();
         let close = measurement.approx_eq(10.0, 0.5);
 
         // With small std dev, should almost always be close to 10
@@ -215,7 +215,7 @@ mod tests {
 
     #[test]
     fn test_within_range() {
-        let value = Uncertain::uniform(0.0, 10.0);
+        let value = Uncertain::uniform(0.0, 10.0).unwrap();
         let in_range = value.within_range(2.0, 8.0);
 
         // About 60% of uniform[0,10] should be in [2,8]
@@ -226,8 +226,8 @@ mod tests {
 
     #[test]
     fn test_uncertain_vs_uncertain_comparison() {
-        let x = Uncertain::normal(5.0, 1.0);
-        let y = Uncertain::normal(3.0, 1.0);
+        let x = Uncertain::normal(5.0, 1.0).unwrap();
+        let y = Uncertain::normal(3.0, 1.0).unwrap();
         let evidence = x.gt_uncertain(&y);
 
         // x should usually be greater than y

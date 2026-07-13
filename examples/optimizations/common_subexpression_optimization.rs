@@ -8,9 +8,9 @@ fn main() {
     println!("=======================================\n");
 
     // Create a complex expression with common subexpressions
-    let x = Uncertain::normal(2.0, 0.1);
-    let y = Uncertain::normal(3.0, 0.1);
-    let z = Uncertain::normal(1.0, 0.1);
+    let x = Uncertain::normal(2.0, 0.1).unwrap();
+    let y = Uncertain::normal(3.0, 0.1).unwrap();
+    let z = Uncertain::normal(1.0, 0.1).unwrap();
 
     // Expression: (x + y) * (x + y) + (x + y) * z
     // This has the common subexpression (x + y) repeated 3 times

@@ -30,6 +30,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **BREAKING**: Error return types changed from `Result<T, &'static str>` to `Result<T, UncertainError>`
+- **BREAKING**: Distribution constructors (`normal`, `uniform`, `exponential`, `log_normal`,
+  `beta`, `gamma`, `bernoulli`, `binomial`, `poisson`, `geometric`) now validate their
+  parameters and return `Result<Uncertain<T>, UncertainError>` instead of constructing an
+  `Uncertain<T>` infallibly. See `MIGRATION_GUIDE.md`.
 - Error messages now include structured data (e.g., expected vs actual counts)
 - Improved error messages with more context and helpful information
 

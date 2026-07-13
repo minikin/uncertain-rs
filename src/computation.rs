@@ -1492,8 +1492,8 @@ mod tests {
     #[test]
     fn test_complex_computation_graph() {
         // Test (x + y) * (x - y) where x and y are uncertain values
-        let x = Uncertain::normal(5.0, 1.0);
-        let y = Uncertain::normal(3.0, 1.0);
+        let x = Uncertain::normal(5.0, 1.0).unwrap();
+        let y = Uncertain::normal(3.0, 1.0).unwrap();
 
         // This should build a computation graph
         let sum = x.clone() + y.clone();
