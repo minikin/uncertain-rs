@@ -1,0 +1,5 @@
+exclude_globs = [
+    "examples/**",
+    "benches/**",
+]
+minimum_test_timeout = 30
