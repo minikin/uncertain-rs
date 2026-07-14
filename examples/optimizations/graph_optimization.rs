@@ -25,7 +25,7 @@ fn main() {
     println!("Original expression: (x + y) * (x + y) + (x + y) * z + (x + 0) * 1");
     println!("Expected result: (2 + 3) * (2 + 3) + (2 + 3) * 1 + (2 + 0) * 1 = 25 + 5 + 2 = 32\n");
 
-    let result_without_opt = expr.expected_value(1000);
+    let result_without_opt = expr.expected_value(1000).unwrap();
     println!("Result without optimization: {result_without_opt:.2}");
 
     println!("\n🔄 Applying Graph Optimizations...");

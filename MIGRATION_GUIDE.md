@@ -131,9 +131,64 @@ A rejected parameter returns `UncertainError::NonFiniteParameter { parameter, va
 or infinite input) or `UncertainError::InvalidParameter { parameter, value, constraint }`
 (finite but out of range) — never a panic.
 
-### Not affected by this release
+## Statistics methods now return `Result`
 
-Statistics methods (`quantile`, `confidence_interval`, `pdf_kde`, and anything taking a
-`sample_count`) are unchanged in 0.3.0 — that validation is tracked separately (see
-`specs/18-statistics-validation.md` in the repo) and will be called out in its own
-CHANGELOG entry when it ships.
+Every statistics method that takes a `sample_count: usize` — `mode`, `histogram`,
+`entropy`, `expected_value`, `expected_value_adaptive`, `variance`,
+`standard_deviation`, `skewness`, `kurtosis`, `confidence_interval`, `cdf`, `quantile`,
+`interquartile_range`, `median_absolute_deviation`, `pdf_kde`, `log_likelihood`,
+`correlation`, `compute_stats_batch`, `lazy_stats`/`stats`, `LazyStats::new`, and
+`AdaptiveLazyStats::new` — now returns `Result<_, UncertainError>` instead of an
+infallible value. `quantile` additionally validates `q`, `confidence_interval` validates
+`confidence`, and `pdf_kde`/`log_likelihood` validate `bandwidth`.
+
+### Why
+
+Before 0.3.0, `sample_count = 0` silently produced `NaN`, `0.0`, or an empty
+collection depending on the method — a division by zero or an empty iterator that
+happened to have a harmless-looking default, rather than a signal that something was
+wrong. Likewise, `quantile(1.5, ...)` or `confidence_interval(-1.0, ...)` silently
+clamped to a boundary value instead of rejecting an out-of-range request:
+
+```rust
+// 0.2.x — compiles, but silently wrong
+let mean = Uncertain::normal(0.0, 1.0).unwrap().expected_value(0);       // NaN
+let median = Uncertain::normal(0.0, 1.0).unwrap().quantile(1.5, 1000);   // silently clamped
+```
+
+### How to update
+
+Add `.unwrap()` for compile-time-constant, known-valid arguments, or propagate with `?`
+when `sample_count`/`q`/`confidence`/`bandwidth` come from user input:
+
+```rust
+// Before (0.2.x)
+let mean = normal.expected_value(1000);
+
+// After (0.3.0) — known-valid argument
+let mean = normal.expected_value(1000).unwrap();
+
+// After (0.3.0) — argument from an untrusted source
+fn summarize(dist: &Uncertain<f64>, sample_count: usize) -> Result<f64, UncertainError> {
+    let mean = dist.expected_value(sample_count)?;
+    Ok(mean)
+}
+```
+
+`LazyStats`'s own `mean`/`variance`/`std_dev`/`samples` accessors are unaffected — the
+`sample_count` they use is validated once when the `LazyStats` is constructed
+(`normal.lazy_stats(1000)?`), so the accessors themselves stay infallible. Its
+`quantile`/`confidence_interval` methods (which take `q`/`confidence` directly) do
+return `Result`, same as the `Uncertain` variants.
+
+### Validation rules
+
+| Parameter | Constraint | Error |
+|---|---|---|
+| `sample_count: usize` (all listed methods) | `> 0` | `InvalidSampleCount` |
+| `q: f64` (`quantile`) | `∈ [0, 1]` | `InvalidQuantile` |
+| `confidence: f64` (`confidence_interval`) | `∈ (0, 1)` | `InvalidConfidence` |
+| `bandwidth: f64` (`pdf_kde`, `log_likelihood`) | `> 0` | `InvalidBandwidth` |
+
+Valid inputs are unaffected: every `Ok(...)` value is bit-identical to the corresponding
+0.2.x return value.

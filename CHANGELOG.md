@@ -39,6 +39,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `beta`, `gamma`, `bernoulli`, `binomial`, `poisson`, `geometric`) now validate their
   parameters and return `Result<Uncertain<T>, UncertainError>` instead of constructing an
   `Uncertain<T>` infallibly. See `MIGRATION_GUIDE.md`.
+- **BREAKING**: Statistics entry points in `src/statistics.rs` now validate their
+  parameters and return `Result` instead of silently producing `NaN`/a clamped value:
+  every method taking `sample_count: usize` (`mode`, `histogram`, `entropy`,
+  `expected_value`, `expected_value_adaptive`, `variance`, `standard_deviation`,
+  `skewness`, `kurtosis`, `confidence_interval`, `cdf`, `quantile`,
+  `interquartile_range`, `median_absolute_deviation`, `pdf_kde`, `log_likelihood`,
+  `correlation`, `compute_stats_batch`, `lazy_stats`/`stats`, `LazyStats::new`,
+  `AdaptiveLazyStats::new`) rejects `sample_count == 0` (`InvalidSampleCount`);
+  `quantile` additionally rejects `q` outside `[0, 1]` (`InvalidQuantile`);
+  `confidence_interval` rejects `confidence` outside `(0, 1)` (`InvalidConfidence`);
+  `pdf_kde`/`log_likelihood` reject non-positive `bandwidth` (`InvalidBandwidth`). See
+  `MIGRATION_GUIDE.md`.
 - Error messages now include structured data (e.g., expected vs actual counts)
 - Improved error messages with more context and helpful information
 - Distribution sampling (`normal`, `uniform`, `exponential`, `log_normal`, `beta`, `gamma`,

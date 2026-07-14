@@ -21,7 +21,7 @@ fn main() {
     println!("Expected result: (2 + 3) * (2 + 3) + (2 + 3) * 1 = 25 + 5 = 30\n");
 
     // Evaluate without optimization
-    let result_without_opt = expr.expected_value(1000);
+    let result_without_opt = expr.expected_value(1000).unwrap();
     println!("Result without optimization: {result_without_opt:.2}");
 
     println!("\n🔄 Applying Common Subexpression Elimination...");
