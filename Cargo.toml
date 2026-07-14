@@ -23,6 +23,7 @@ uuid = { version = "1.18.1", features = ["v4"] }
 thiserror = "2.0.17"
 rayon = { version = "1.11.0", optional = true }
 rand_chacha = "0.10.0"
+rand_distr = "0.6.0"
 
 [features]
 default = []
