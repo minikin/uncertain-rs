@@ -39,6 +39,7 @@ pub mod distributions;
 pub mod error;
 pub mod hypothesis;
 pub mod operations;
+mod rng;
 pub mod statistics;
 pub mod traits;
 pub mod uncertain;

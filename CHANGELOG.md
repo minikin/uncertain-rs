@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Helper methods for creating errors programmatically
 - New example: `error_handling.rs` demonstrating proper error handling patterns
 - Migration guide (`MIGRATION_GUIDE.md`) for upgrading from 0.2.x
+- Reproducible sampling: `Uncertain::sample_with`/`take_samples_with` take a seeded
+  `ChaCha8Rng` (new `rand_chacha` dependency) and produce bitwise-identical results
+  across runs and platforms for the same seed; `take_samples_with_par` (parallel
+  feature) gives the same guarantee independent of thread count. `sample()`/
+  `take_samples()` are unchanged (still thread-local randomness).
 
 ### Changed
 

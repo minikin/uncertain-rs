@@ -13,6 +13,7 @@ A Rust library for uncertainty-aware programming, implementing the approach from
   - [Installation](#installation)
   - [Quick Start](#quick-start)
   - [Error Handling](#error-handling)
+  - [Reproducible Sampling](#reproducible-sampling)
   - [Advanced Features](#advanced-features)
     - [Parallel Sampling](#parallel-sampling)
     - [Graph Optimization](#graph-optimization)
@@ -50,6 +51,7 @@ if speeding_evidence.probability_exceeds(0.95) {
 - **SPRT hypothesis testing**: Sequential Probability Ratio Test for optimal sampling
 - **Rich distributions**: Normal, uniform, exponential, binomial, categorical, etc.
 - **Statistical analysis**: Mean, std dev, confidence intervals, CDF, etc.
+- **Reproducible sampling**: Seed a `ChaCha8Rng` for bitwise-identical results across runs
 - **Parallel sampling** (optional): Multi-threaded sample generation using rayon
 
 ## Installation
@@ -111,6 +113,33 @@ match result {
 
 See [`examples/error_handling.rs`](examples/error_handling.rs) for a complete walkthrough,
 and [`MIGRATION_GUIDE.md`](MIGRATION_GUIDE.md) if you're upgrading from a pre-0.3 release.
+
+## Reproducible Sampling
+
+`sample()`/`take_samples()` draw from real thread-local randomness — different every run,
+by design. For reproducible results (debugging, tests, papers), use `sample_with`/
+`take_samples_with` with a seeded `ChaCha8Rng`:
+
+```rust
+use uncertain_rs::Uncertain;
+use rand_chacha::ChaCha8Rng;
+use rand::SeedableRng;
+
+let normal = Uncertain::normal(0.0, 1.0).unwrap();
+
+let mut rng = ChaCha8Rng::seed_from_u64(42);
+let samples = normal.take_samples_with(&mut rng, 1000);
+
+// Same seed, same crate version -> bitwise-identical stream, on any platform.
+let mut rng2 = ChaCha8Rng::seed_from_u64(42);
+assert_eq!(samples, normal.take_samples_with(&mut rng2, 1000));
+```
+
+This works for composed expressions too (arithmetic, comparisons, evidence) — the whole
+expression tree draws from the one seeded RNG for the duration of the call. With the
+`parallel` feature, `take_samples_with_par(seed, count)` gives the same reproducibility
+independent of thread count (each sample index always derives the same sub-seed,
+regardless of which thread happens to compute it).
 
 ## Advanced Features
 

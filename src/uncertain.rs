@@ -1,6 +1,7 @@
 use crate::computation::{ComputationNode, SampleContext};
 use crate::operations::Arithmetic;
 use crate::traits::Shareable;
+use rand_chacha::ChaCha8Rng;
 use std::sync::Arc;
 
 /// A type that represents uncertain data as a probability distribution
@@ -110,6 +111,31 @@ where
         (self.sample_fn)()
     }
 
+    /// Generate a sample using the given RNG instead of thread-local randomness.
+    ///
+    /// Two calls with RNGs seeded identically produce identical results, for the same
+    /// `Uncertain` value and the same sequence of prior calls to it — the RNG advances
+    /// with each draw, exactly like calling `rng.random()` directly would.
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    /// use rand_chacha::ChaCha8Rng;
+    /// use rand::SeedableRng;
+    ///
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
+    ///
+    /// let mut rng_a = ChaCha8Rng::seed_from_u64(42);
+    /// let mut rng_b = ChaCha8Rng::seed_from_u64(42);
+    /// assert_eq!(normal.sample_with(&mut rng_a), normal.sample_with(&mut rng_b));
+    /// ```
+    #[must_use]
+    pub fn sample_with(&self, rng: &mut ChaCha8Rng) -> T {
+        let (result, advanced) = crate::rng::with_override(rng.clone(), || self.sample());
+        *rng = advanced;
+        result
+    }
+
     /// Transforms an uncertain value by applying a function to each sample.
     ///
     /// # Example
@@ -205,6 +231,33 @@ where
         self.samples().take(count).collect()
     }
 
+    /// Take a specific number of samples using the given RNG instead of thread-local
+    /// randomness. Two calls with identically-seeded RNGs produce bitwise-identical
+    /// vectors, for the same `Uncertain` value.
+    ///
+    /// # Example
+    /// ```rust
+    /// use uncertain_rs::Uncertain;
+    /// use rand_chacha::ChaCha8Rng;
+    /// use rand::SeedableRng;
+    ///
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
+    ///
+    /// let mut rng_a = ChaCha8Rng::seed_from_u64(42);
+    /// let mut rng_b = ChaCha8Rng::seed_from_u64(42);
+    /// assert_eq!(
+    ///     normal.take_samples_with(&mut rng_a, 1000),
+    ///     normal.take_samples_with(&mut rng_b, 1000)
+    /// );
+    /// ```
+    #[must_use]
+    pub fn take_samples_with(&self, rng: &mut ChaCha8Rng, count: usize) -> Vec<T> {
+        let (result, advanced) =
+            crate::rng::with_override(rng.clone(), || self.take_samples(count));
+        *rng = advanced;
+        result
+    }
+
     /// Take a specific number of samples in parallel using rayon
     ///
     /// This method generates samples concurrently across multiple threads,
@@ -238,6 +291,43 @@ where
     {
         use rayon::prelude::*;
         (0..count).into_par_iter().map(|_| self.sample()).collect()
+    }
+
+    /// Take samples in parallel, reproducibly.
+    ///
+    /// Sample index `i` always derives the same sub-seed from `seed`, independent of
+    /// thread count or scheduling, so the result is identical across runs — unlike
+    /// [`take_samples_par`](Self::take_samples_par), which draws from thread-local
+    /// randomness and is never reproducible.
+    ///
+    /// # Requirements
+    /// - Requires the `parallel` feature flag
+    /// - `T` must implement `Send`
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use uncertain_rs::Uncertain;
+    ///
+    /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
+    /// let a = normal.take_samples_with_par(42, 10_000);
+    /// let b = normal.take_samples_with_par(42, 10_000);
+    /// assert_eq!(a, b);
+    /// ```
+    #[must_use]
+    #[cfg(feature = "parallel")]
+    pub fn take_samples_with_par(&self, seed: u64, count: usize) -> Vec<T>
+    where
+        T: Send,
+    {
+        use rayon::prelude::*;
+        (0..count)
+            .into_par_iter()
+            .map(|i| {
+                let sub_seed = crate::rng::derive_sub_seed(seed, i as u64);
+                let mut sub_rng = crate::rng::seeded_rng(sub_seed);
+                self.sample_with(&mut sub_rng)
+            })
+            .collect()
     }
 }
 

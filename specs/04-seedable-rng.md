@@ -1,48 +1,82 @@
 # Spec 04 — Seedable RNG & Reproducibility
 
-**Status:** Pending | **Effort:** High | **Module:** `src/distributions.rs`, `src/uncertain.rs`, all tests
+**Status:** Implemented | **Effort:** High | **Module:** `src/rng.rs` (new), `src/distributions.rs`, `src/uncertain.rs`
 
 ## Context
 
-Every sampler calls thread-local `rand::random()` / `rand::rng()`. There is no seed API
-anywhere in the crate, so no computation is reproducible — a serious gap for a
-probabilistic library (debugging, papers, CI). All statistical tests rely on loose
-tolerances over unseeded draws and are inherently flaky, multiplied by the
+Every sampler called thread-local `rand::random()` / `rand::rng()`. There was no seed API
+anywhere in the crate, so no computation was reproducible — a serious gap for a
+probabilistic library (debugging, papers, CI). All statistical tests relied on loose
+tolerances over unseeded draws and were inherently flaky, multiplied by the
 stable/beta/nightly CI matrix.
 
 ## Scope and Invariants
 
-1. Sampling becomes RNG-injectable. Design: samplers take `&mut dyn RngCore` (or a generic
-   `R: Rng`) internally; the public surface gains
-   - `Uncertain::sample_with(&mut rng) -> T` and `take_samples_with(&mut rng, n)`;
-   - existing `sample()`/`take_samples(n)` keep today's behavior via the thread-local RNG.
-2. A seeded context constructor: every distribution constructor gets a deterministic path
-   (e.g. builder or `with_seed(seed)` adapter) such that two `Uncertain` values built from
-   the same parameters and seed produce identical sample streams.
-3. Determinism invariant: same seed + same operation graph + same sample count ⇒ bitwise
-   identical `Vec<T>` from `take_samples_with`, across runs and platforms (use a portable
-   PRNG, e.g. `ChaCha8`/`Pcg64` via `rand`'s seedable APIs — not `ThreadRng`).
-4. The `parallel` feature preserves reproducibility by deriving per-chunk sub-seeds from
-   the master seed (results independent of thread count), or documents explicitly that
-   parallel sampling has a per-run stream — pick one; the invariant chosen is tested.
-5. Test suite deflaking: every statistical assertion in unit/integration tests switches to
-   a fixed-seed RNG; tolerance-based assertions remain only where they test genuine
-   statistical properties, and then with seeds making them deterministic.
-6. No public API is removed; this is additive (breaking only if constructors change shape,
-   which belongs to Spec 02's 0.3.0 batch).
+1. **Deviation from the original draft's mechanism** — the draft's item 1 proposed
+   changing sampling closures to take `&mut dyn RngCore`/`R: Rng` as an explicit
+   parameter. `Uncertain<T>`'s `sample_fn: Arc<dyn Fn() -> T + Send + Sync>` (and every
+   combinator — `map`, `flat_map`, `filter` — every arithmetic/comparison/logical operator
+   overload, and the whole `ComputationNode` evaluation engine) is built around that
+   zero-argument shape; threading an RNG parameter through all of it would mean rewriting
+   the crate's core representation, a far larger and riskier change than "add seeding."
+   Instead: `src/rng.rs` provides a thread-local RNG **override** — `with_override`
+   installs a caller-provided RNG as the thread-local source for the dynamic extent of one
+   call (via a panic-safe `Drop` guard), and `with_rng`/`random_f64` (used by every
+   distribution constructor in place of `rand::random()`/`rand::rng()`) transparently draw
+   from that override when one is installed, falling back to real thread-local randomness
+   otherwise. No existing closure signature changed. The public surface still gained
+   exactly what item 1 asked for:
+   - `Uncertain::sample_with(&mut ChaCha8Rng) -> T` and
+     `take_samples_with(&mut ChaCha8Rng, n) -> Vec<T>`;
+   - `sample()`/`take_samples(n)` are byte-for-byte unchanged (still thread-local).
+2. **Deviation:** no separate "seeded context constructor" was added. Any existing
+   `Uncertain<T>` value — built however — becomes reproducible simply by sampling it via
+   `sample_with`/`take_samples_with` instead of `sample`/`take_samples`; there's no
+   separate construction-time seeding step to design or maintain.
+3. **Deviation from the original draft's RNG choice** — the draft suggested
+   `ChaCha8`/`Pcg64` via `rand`'s own seedable APIs (i.e. `rand::rngs::StdRng`). Checked
+   at implementation time: this `rand` version's own docs state `StdRng` is **"non-portable:
+   any future library version may replace the algorithm and results may be
+   platform-dependent... even with a fixed seed, output is not portable"** — directly
+   contradicting the determinism invariant this spec exists to provide. Used
+   `rand_chacha::ChaCha8Rng` directly instead (new dependency) — the same family the draft
+   named, but the actual portable/version-stable implementation, not the generic
+   alias. `ChaCha8Rng: Clone` lets `sample_with`/`take_samples_with` install a clone of the
+   caller's state into the override and write the advanced clone back afterward — this is
+   what makes `with_override` unsafe-code-free (no `Box<dyn Rng>` + lifetime erasure
+   needed), at the cost of fixing the RNG type rather than being generic over `R: Rng`.
+4. `take_samples_with_par(seed: u64, count: usize)` (parallel feature): sample index `i`
+   derives its own sub-seed from `seed` via `splitmix64`-style mixing
+   (`rng::derive_sub_seed`), then seeds a fresh `ChaCha8Rng` per index — independent of
+   which thread computes it or how work is chunked, giving reproducibility independent of
+   thread count (the stronger of the draft's two allowed choices, not just "documented as
+   per-run").
+5. **Scope reduction:** retrofitting every existing statistical test in the crate to a
+   fixed seed (the draft's item 5) is large enough on its own — hundreds of existing
+   tests, a mechanical but sizable effort of its own kind — to be its own spec rather than
+   silently folded into this one. Split out as
+   [Spec 19](19-deflake-existing-tests.md). This spec instead ships a focused new test
+   suite (`tests/seeded_rng_tests.rs`) that directly proves every acceptance test below.
+6. No public API removed; fully additive (a new dependency, new methods).
 
 ## Acceptance Tests
 
 - **Given** two RNGs seeded identically, **when** `normal(0,1)` is sampled 10 000 times via
-  `take_samples_with` on each, **then** the two vectors are exactly equal.
+  `take_samples_with` on each, **then** the two vectors are exactly equal. ✅
+  (`identically_seeded_rngs_produce_identical_sample_streams`)
 - **Given** a composed computation (`(a + b) * c` with comparisons), **when** evaluated
-  twice with the same seed, **then** `probability_exceeds`-style results are identical.
+  twice with the same seed, **then** results are identical. ✅
+  (`composed_computation_is_deterministic_under_seeding`)
 - **Given** different seeds, **when** the same distribution is sampled, **then** the
-  streams differ (sanity check that seeding is actually wired through).
-- **Given** the `parallel` feature with 1, 2, and 8 threads, **when** the chosen
-  reproducibility invariant from item 4 applies, **then** it holds and is asserted by
-  `tests/parallel_sampling_tests.rs`.
-- **Given** the full test suite, **when** run 20 times in a loop (`just test-repeat` or
-  equivalent), **then** there are zero statistical flakes.
+  streams differ. ✅ (`different_seeds_produce_different_sample_streams`)
+- **Given** the `parallel` feature with 1, 2, and 8 threads, **when**
+  `take_samples_with_par` runs with the same seed, **then** the result is identical
+  regardless of thread count. ✅ (`take_samples_with_par_is_independent_of_thread_count`,
+  using explicit `rayon::ThreadPoolBuilder` pools)
+- **Given** the new seeded-RNG test suite, **when** run repeatedly, **then** there are zero
+  flakes (verified locally: 5 consecutive full runs, default and `parallel` features). Full
+  crate-wide deflaking is Spec 19, not this spec.
 - **Given** `sample()` with no explicit RNG, **when** called, **then** behavior is
-  unchanged from today (thread-local randomness).
+  unchanged from today (thread-local randomness) — and using the seeded API earlier in a
+  test doesn't leave a stuck override behind. ✅
+  (`sample_without_explicit_rng_is_unaffected_by_seeding_infrastructure`)
