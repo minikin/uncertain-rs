@@ -87,6 +87,17 @@ pub enum UncertainError {
         /// The invalid bandwidth value
         value: f64,
     },
+
+    /// Error when a computation graph node can't be evaluated in the requested domain
+    /// (e.g. a `BinaryOp` node evaluated where only `Leaf`/`UnaryOp` are supported, or a
+    /// boolean `BinaryOp` node, for which no `BinaryOperation` is defined).
+    #[error("Unsupported node: expected {expected}, found {found}")]
+    UnsupportedNode {
+        /// What the evaluation method can handle
+        expected: &'static str,
+        /// The node kind actually encountered
+        found: &'static str,
+    },
 }
 
 /// A specialized `Result` type for uncertain operations.
@@ -215,6 +226,21 @@ impl UncertainError {
     pub fn invalid_bandwidth(value: f64) -> Self {
         Self::InvalidBandwidth { value }
     }
+
+    /// Create an error for a computation graph node that can't be evaluated in the
+    /// requested domain.
+    ///
+    /// # Example
+    /// ```
+    /// use uncertain_rs::error::UncertainError;
+    ///
+    /// let error = UncertainError::unsupported_node("Leaf or UnaryOp", "BinaryOp");
+    /// assert!(error.to_string().contains("BinaryOp"));
+    /// ```
+    #[must_use]
+    pub fn unsupported_node(expected: &'static str, found: &'static str) -> Self {
+        Self::UnsupportedNode { expected, found }
+    }
 }
 
 #[cfg(test)]
@@ -301,6 +327,13 @@ mod tests {
         let error = UncertainError::invalid_bandwidth(-0.1);
         assert!(error.to_string().contains("-0.1"));
         assert!(error.to_string().contains("positive"));
+    }
+
+    #[test]
+    fn test_unsupported_node_error() {
+        let error = UncertainError::unsupported_node("Leaf or UnaryOp", "BinaryOp");
+        assert!(error.to_string().contains("Leaf or UnaryOp"));
+        assert!(error.to_string().contains("BinaryOp"));
     }
 
     #[test]

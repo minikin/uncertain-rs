@@ -192,3 +192,42 @@ return `Result`, same as the `Uncertain` variants.
 
 Valid inputs are unaffected: every `Ok(...)` value is bit-identical to the corresponding
 0.2.x return value.
+
+## `ComputationNode` evaluation methods now return `Result` instead of panicking
+
+`ComputationNode::evaluate`, `evaluate_arithmetic`, and `evaluate_bool` (low-level graph
+evaluation, not part of the typical `Uncertain<T>` usage surface) return
+`Result<_, UncertainError>` instead of panicking on node shapes they can't handle.
+
+### Why
+
+Each of these three methods is total over some, but not all, `ComputationNode` variants —
+which variants depends on `T`'s trait bounds at each method (see below). Before 0.3.0, the
+unsupported cases were a `panic!`; a library consumer walking a graph and picking the wrong
+method for a node shape could crash instead of getting a typed, recoverable error.
+
+### How to update
+
+If you call these methods directly (most code doesn't — `Uncertain<T>`'s combinator API
+builds and evaluates graphs internally and is unaffected), handle the `Result`:
+
+```rust
+// Before (0.2.x) — panicked on a BinaryOp node
+// let value = node.evaluate(&mut context);
+
+// After (0.3.0)
+let value = node.evaluate(&mut context)?;
+```
+
+- `evaluate` (`T: Shareable`) is total for `Leaf`/`UnaryOp`; `BinaryOp`/`Conditional` return
+  `Err(UnsupportedNode)` — this is a structural limit (both require trait bounds `Shareable`
+  alone doesn't provide), not a temporary gap.
+- `evaluate_arithmetic` (`T: Arithmetic`) is now the total dispatcher for the arithmetic
+  domain, including `Conditional` (it absorbs the former
+  `evaluate_conditional_with_arithmetic`, which is removed — call `evaluate_arithmetic`
+  instead).
+- `evaluate_bool` is total except for `BinaryOp`, which has no defined `bool` operation.
+- `evaluate_fresh` is unaffected: it keeps its infallible `-> T` signature.
+
+`GraphProfiler::get_stats` is unaffected by this section — it already returned `Option` and
+no longer has an internal (unreachable) `.expect()`.

@@ -77,7 +77,9 @@ where
         let node_clone = node.clone();
         let sample_fn = Arc::new(move || {
             let mut context = SampleContext::new();
-            node_clone.evaluate_conditional_with_arithmetic(&mut context)
+            node_clone
+                .evaluate_arithmetic(&mut context)
+                .expect("graphs built via the public Uncertain<T> API are always well-formed")
         });
         let id = uuid::Uuid::new_v4();
 
