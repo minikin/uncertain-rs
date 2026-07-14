@@ -13,7 +13,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 | 02 | [Validated constructors](02-validated-constructors.md) | P0 | High | **yes** | Implemented |
 | 03 | [Remove sampling-based Eq/Ord](03-remove-sampling-eq.md) | P0 | Low | **yes** | Implemented |
 | 04 | [Seedable RNG & reproducibility](04-seedable-rng.md) | P0 | High | no | Implemented |
-| 05 | [Correct sampling via rand_distr](05-rand-distr-sampling.md) | P0 | Medium | no | Pending |
+| 05 | [Correct sampling via rand_distr](05-rand-distr-sampling.md) | P0 | Medium | no | Implemented |
 | 06 | [Total graph evaluation](06-total-graph-evaluation.md) | P0 | Medium | **yes** | Pending |
 | 07 | [Sound constant folding](07-sound-constant-folding.md) | P0 | Medium | no | Pending |
 | 08 | [Effective CSE](08-effective-cse.md) | P1 | Medium | no | Pending |
@@ -37,12 +37,15 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
    regression gate against a committed baseline rather than an absolute threshold, since
    9 functions already exceed it today.)*
 2. **04 → 05** (seeding, then correct samplers) — reproducibility unblocks deflaked tests
-   used by every other spec. *(04 implemented; used `rand_chacha::ChaCha8Rng` directly
-   instead of `rand::rngs::StdRng` — the latter is explicitly documented as non-portable
-   in this `rand` version, which would have broken the determinism guarantee. Retrofitting
-   every existing statistical test to a fixed seed was split out to Spec 19, since it's a
-   large mechanical effort of its own kind, distinct from building the seeding
-   infrastructure.)*
+   used by every other spec. *(Both implemented. 04 used `rand_chacha::ChaCha8Rng`
+   directly instead of `rand::rngs::StdRng` — the latter is explicitly documented as
+   non-portable in this `rand` version, which would have broken the determinism
+   guarantee. Retrofitting every existing statistical test to a fixed seed was split out
+   to Spec 19, since it's a large mechanical effort of its own kind, distinct from
+   building the seeding infrastructure. 05 found `rand_distr`'s `Gamma`/`Poisson`
+   constructors stricter than this crate's committed degenerate-case behavior
+   (`scale`/`lambda` of `0`), handled via special-casing before ever calling
+   `rand_distr`; measured a 65.5% speedup for normal sampling.)*
 3. **02, 03, 06, 18** — the breaking API changes, batched into one 0.3.0 release.
    *(02 implemented; its statistics-entry-point-validation half was split out to 18 —
    see 02's spec for why: a comparably large, independently-shippable ripple through a

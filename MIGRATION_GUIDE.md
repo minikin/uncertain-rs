@@ -1,5 +1,20 @@
 # Migration Guide: 0.2.x → 0.3.0
 
+## New: correct, faster sampling (no migration needed for almost everyone)
+
+Distribution sampling now uses `rand_distr` (new dependency) instead of hand-rolled
+algorithms. This fixes a real correctness bug: the previous normal sampler clamped its
+Box-Muller uniforms to `[0.001, 0.999]`, making `|z| > ~3.09` unreachable — every
+downstream statistic derived from `normal`/`log_normal` samples was subtly biased away
+from the true tails. It's also faster (measured: ~65% faster for normal sampling, 272µs
+-> 94µs per 1000 samples).
+
+Every distribution's degenerate-case behavior (`std_dev`/`scale`/`lambda` of `0`
+degenerating to a point mass, as documented since 0.3.0's constructor validation) is
+unchanged. The one new constraint: `poisson(lambda)` now rejects
+`lambda > Poisson::MAX_LAMBDA` (~1.844e19) — a real limit of the sampling algorithm
+rather than an arbitrary choice, and one no realistic use case should ever approach.
+
 ## New: reproducible sampling (no migration needed)
 
 This is additive, not breaking — nothing to change in existing code. `sample()`/
