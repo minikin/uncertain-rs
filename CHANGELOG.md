@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   across runs and platforms for the same seed; `take_samples_with_par` (parallel
   feature) gives the same guarantee independent of thread count. `sample()`/
   `take_samples()` are unchanged (still thread-local randomness).
+- `UncertainError::UnsupportedNode` - returned by `ComputationNode` evaluation methods
+  when a graph node isn't evaluable in the requested domain (e.g. a boolean `BinaryOp`,
+  for which no operation is defined).
 
 ### Changed
 
@@ -62,6 +65,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `lambda > ~1.844e19` (`Poisson::MAX_LAMBDA`, a real limit of the sampling algorithm) —
   see `MIGRATION_GUIDE.md`. No other observable behavior change; degenerate cases
   (`std_dev`/`scale`/`lambda` of `0`) are still supported exactly as before.
+- **BREAKING**: `ComputationNode::evaluate`, `evaluate_arithmetic`, and `evaluate_bool` now
+  return `Result<_, UncertainError>` instead of panicking on unsupported node/domain
+  combinations (e.g. a `BinaryOp` passed to `evaluate`, or a boolean `BinaryOp` passed to
+  `evaluate_bool`). `evaluate_arithmetic` additionally now handles `Conditional` nodes
+  directly (it absorbs the former `evaluate_conditional_with_arithmetic`, which is removed).
+  `evaluate_fresh` keeps its infallible `-> T` signature. See `MIGRATION_GUIDE.md`.
 
 ### Removed
 
@@ -70,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   meaningful fact about a distribution and silently broke both traits' contracts (`a == a`
   could be `false`). Use the evidence-based `Comparison` trait (`a.gt(threshold)`,
   `a.lt_uncertain(&b)`, etc.) instead. See `MIGRATION_GUIDE.md`.
+- **BREAKING**: `ComputationNode::evaluate_conditional_with_arithmetic` is removed; its
+  logic is now part of `evaluate_arithmetic` (see above).
 
 ## [0.2.0] - 2024-09-24
 

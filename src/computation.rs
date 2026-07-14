@@ -1,3 +1,4 @@
+use crate::error::UncertainError;
 use crate::operations::{Arithmetic, arithmetic::BinaryOperation};
 use crate::traits::Shareable;
 use std::collections::HashMap;
@@ -182,68 +183,72 @@ where
     /// This is the core evaluation method that respects memoization to ensure
     /// shared variables produce consistent samples within a single evaluation.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// - Panics if called on a `BinaryOp` variant. Use `evaluate_arithmetic` instead for binary operations.
-    /// - Panics if called on a `Conditional` variant. Use `evaluate_conditional` instead for conditional operations.
-    pub fn evaluate(&self, context: &mut SampleContext) -> T {
+    /// Returns `UncertainError::UnsupportedNode` if called on a `BinaryOp` variant (use
+    /// `evaluate_arithmetic` instead) or a `Conditional` variant (use `evaluate_arithmetic`,
+    /// which handles conditionals, or `evaluate_bool` for boolean graphs).
+    pub fn evaluate(&self, context: &mut SampleContext) -> Result<T, UncertainError> {
         match self {
             ComputationNode::Leaf { id, sample } => {
                 // Check if we already have a memoized value for this node
                 if let Some(cached) = context.get_value::<T>(id) {
-                    cached
+                    Ok(cached)
                 } else {
                     // Generate new sample and memoize it
                     let value = sample();
                     context.set_value(*id, value.clone());
-                    value
+                    Ok(value)
                 }
             }
 
             ComputationNode::UnaryOp { operand, operation } => {
-                let operand_val = operand.evaluate(context);
-                match operation {
+                let operand_val = operand.evaluate(context)?;
+                Ok(match operation {
                     UnaryOperation::Map(func) => func(operand_val),
                     UnaryOperation::Filter(_) => {
                         // Filter requires special handling with rejection sampling
                         // This is a simplified implementation
                         operand_val
                     }
-                }
+                })
             }
 
             // These variants require special handling based on type constraints
-            ComputationNode::BinaryOp { .. } => {
-                panic!(
-                    "BinaryOp evaluation requires arithmetic trait bounds. Use evaluate_arithmetic instead."
-                )
-            }
+            ComputationNode::BinaryOp { .. } => Err(UncertainError::unsupported_node(
+                "Leaf or UnaryOp",
+                "BinaryOp",
+            )),
 
-            ComputationNode::Conditional { .. } => {
-                panic!(
-                    "Conditional evaluation requires specific handling. Use evaluate_conditional instead."
-                )
-            }
+            ComputationNode::Conditional { .. } => Err(UncertainError::unsupported_node(
+                "Leaf or UnaryOp",
+                "Conditional",
+            )),
         }
     }
 
     /// Evaluates arithmetic operations with proper trait bounds
     ///
-    /// # Panics
+    /// Also handles `Conditional` nodes: the condition is evaluated via `evaluate_bool`
+    /// and the taken branch is evaluated arithmetically, so this is a total dispatcher
+    /// over every `ComputationNode<T>` variant for arithmetic `T`.
     ///
-    /// Panics if called on a `Conditional` variant with a boolean condition, as this is not supported in arithmetic context.
-    pub fn evaluate_arithmetic(&self, context: &mut SampleContext) -> T
+    /// # Errors
+    ///
+    /// Returns `UncertainError::UnsupportedNode` if evaluating a `Conditional`'s boolean
+    /// condition encounters an unsupported node (e.g. a boolean `BinaryOp`).
+    pub fn evaluate_arithmetic(&self, context: &mut SampleContext) -> Result<T, UncertainError>
     where
         T: Arithmetic,
     {
         match self {
             ComputationNode::Leaf { id, sample } => {
                 if let Some(cached) = context.get_value::<T>(id) {
-                    cached
+                    Ok(cached)
                 } else {
                     let value = sample();
                     context.set_value(*id, value.clone());
-                    value
+                    Ok(value)
                 }
             }
 
@@ -252,27 +257,29 @@ where
                 right,
                 operation,
             } => {
-                let left_val = left.evaluate_arithmetic(context);
-                let right_val = right.evaluate_arithmetic(context);
-                operation.apply(left_val, right_val)
+                let left_val = left.evaluate_arithmetic(context)?;
+                let right_val = right.evaluate_arithmetic(context)?;
+                Ok(operation.apply(left_val, right_val))
             }
 
             ComputationNode::UnaryOp { operand, operation } => {
-                let operand_val = operand.evaluate_arithmetic(context);
-                match operation {
+                let operand_val = operand.evaluate_arithmetic(context)?;
+                Ok(match operation {
                     UnaryOperation::Map(func) => func(operand_val),
                     UnaryOperation::Filter(_) => operand_val,
-                }
+                })
             }
 
             ComputationNode::Conditional {
-                condition: _,
-                if_true: _,
-                if_false: _,
+                condition,
+                if_true,
+                if_false,
             } => {
-                panic!(
-                    "Conditional evaluation with bool condition not supported in arithmetic context"
-                )
+                if condition.evaluate_bool(context)? {
+                    if_true.evaluate_arithmetic(context)
+                } else {
+                    if_false.evaluate_arithmetic(context)
+                }
             }
         }
     }
@@ -281,13 +288,21 @@ where
     ///
     /// This creates a fresh context for evaluation, useful when you want
     /// independent samples without memoization effects.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the graph contains a node that isn't evaluable in the arithmetic domain.
+    /// This can't happen for graphs built via the public `Uncertain<T>` combinator API;
+    /// it would only occur from misuse of the low-level `ComputationNode` constructors
+    /// (e.g. directly constructing a boolean `BinaryOp`, which has no defined operation).
     #[must_use]
     pub fn evaluate_fresh(&self) -> T
     where
         T: Arithmetic,
     {
         let mut context = SampleContext::new();
-        self.evaluate_conditional_with_arithmetic(&mut context)
+        self.evaluate_arithmetic(&mut context)
+            .expect("graphs built via the public Uncertain<T> API are always well-formed")
     }
 
     /// Creates a new leaf node
@@ -457,70 +472,44 @@ where
 impl ComputationNode<bool> {
     /// Evaluates boolean computation nodes
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics if called on a `BinaryOp` variant as boolean binary operations are not implemented.
-    pub fn evaluate_bool(&self, context: &mut SampleContext) -> bool {
+    /// Returns `UncertainError::UnsupportedNode` if called on a `BinaryOp` variant, since
+    /// no boolean `BinaryOperation` is defined (`BinaryOperation` only covers arithmetic
+    /// operations, and `bool` doesn't implement `Arithmetic`).
+    pub fn evaluate_bool(&self, context: &mut SampleContext) -> Result<bool, UncertainError> {
         match self {
             ComputationNode::Leaf { id, sample } => {
                 if let Some(cached) = context.get_value::<bool>(id) {
-                    cached
+                    Ok(cached)
                 } else {
                     let value = sample();
                     context.set_value(*id, value);
-                    value
+                    Ok(value)
                 }
             }
             ComputationNode::UnaryOp { operand, operation } => {
-                let operand_val = operand.evaluate_bool(context);
-                match operation {
+                let operand_val = operand.evaluate_bool(context)?;
+                Ok(match operation {
                     UnaryOperation::Map(func) => func(operand_val),
                     UnaryOperation::Filter(_) => operand_val,
-                }
+                })
             }
-            ComputationNode::BinaryOp { .. } => {
-                panic!("Boolean binary operations not implemented")
-            }
+            ComputationNode::BinaryOp { .. } => Err(UncertainError::unsupported_node(
+                "Leaf, UnaryOp, or Conditional",
+                "BinaryOp",
+            )),
             ComputationNode::Conditional {
                 condition,
                 if_true,
                 if_false,
             } => {
-                let condition_val = condition.evaluate_bool(context);
-                if condition_val {
+                if condition.evaluate_bool(context)? {
                     if_true.evaluate_bool(context)
                 } else {
                     if_false.evaluate_bool(context)
                 }
             }
-        }
-    }
-}
-
-// Add a specialized method for evaluating conditionals with arithmetic return types
-impl<T> ComputationNode<T>
-where
-    T: Shareable,
-{
-    /// Evaluates conditional nodes where condition is bool and branches return T
-    pub fn evaluate_conditional_with_arithmetic(&self, context: &mut SampleContext) -> T
-    where
-        T: Arithmetic,
-    {
-        match self {
-            ComputationNode::Conditional {
-                condition,
-                if_true,
-                if_false,
-            } => {
-                let condition_val = condition.evaluate_bool(context);
-                if condition_val {
-                    if_true.evaluate_arithmetic(context)
-                } else {
-                    if_false.evaluate_arithmetic(context)
-                }
-            }
-            _ => self.evaluate_arithmetic(context),
         }
     }
 }
@@ -1307,11 +1296,6 @@ impl GraphProfiler {
     }
 
     /// Get profiling statistics
-    ///
-    /// # Panics
-    ///
-    /// Panics if the internal state is corrupted and the times vector is empty
-    /// when it shouldn't be (this should never happen in normal usage).
     #[must_use]
     pub fn get_stats(&self, name: &str) -> Option<ProfileStats> {
         let times = self.execution_times.get(name)?;
@@ -1326,12 +1310,8 @@ impl GraphProfiler {
         let mut sorted_times = times.clone();
         sorted_times.sort();
         let median = sorted_times[count / 2];
-        let min = *sorted_times
-            .first()
-            .expect("Times vector should not be empty");
-        let max = *sorted_times
-            .last()
-            .expect("Times vector should not be empty");
+        let min = sorted_times[0];
+        let max = sorted_times[count - 1];
 
         Some(ProfileStats {
             count,
@@ -1428,8 +1408,8 @@ mod tests {
         };
 
         // Evaluate twice with the same context
-        let val1 = leaf.evaluate(&mut context);
-        let val2 = leaf.evaluate(&mut context);
+        let val1 = leaf.evaluate(&mut context).unwrap();
+        let val2 = leaf.evaluate(&mut context).unwrap();
 
         // Should get the same value due to memoization
         assert_eq!(val1, val2);
@@ -1539,51 +1519,59 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "BinaryOp evaluation requires arithmetic trait bounds")]
-    fn test_evaluate_panic_on_binary_op() {
+    fn test_evaluate_err_on_binary_op() {
         let left = ComputationNode::leaf(|| 1.0);
         let right = ComputationNode::leaf(|| 2.0);
         let binary_op = ComputationNode::binary_op(left, right, BinaryOperation::Add);
 
         let mut context = SampleContext::new();
-        binary_op.evaluate(&mut context);
+        let err = binary_op.evaluate(&mut context).unwrap_err();
+        assert_eq!(
+            err,
+            UncertainError::unsupported_node("Leaf or UnaryOp", "BinaryOp")
+        );
     }
 
     #[test]
-    #[should_panic(expected = "Conditional evaluation requires specific handling")]
-    fn test_evaluate_panic_on_conditional() {
+    fn test_evaluate_err_on_conditional() {
         let condition = ComputationNode::leaf(|| true);
         let if_true = ComputationNode::leaf(|| 10.0);
         let if_false = ComputationNode::leaf(|| 20.0);
         let conditional = ComputationNode::conditional(condition, if_true, if_false);
 
         let mut context = SampleContext::new();
-        conditional.evaluate(&mut context);
+        let err = conditional.evaluate(&mut context).unwrap_err();
+        assert_eq!(
+            err,
+            UncertainError::unsupported_node("Leaf or UnaryOp", "Conditional")
+        );
     }
 
     #[test]
-    #[should_panic(
-        expected = "Conditional evaluation with bool condition not supported in arithmetic context"
-    )]
-    fn test_evaluate_arithmetic_panic_on_conditional() {
+    #[allow(clippy::float_cmp)]
+    fn test_evaluate_arithmetic_handles_conditional() {
         let condition = ComputationNode::leaf(|| true);
         let if_true = ComputationNode::leaf(|| 10.0);
         let if_false = ComputationNode::leaf(|| 20.0);
         let conditional = ComputationNode::conditional(condition, if_true, if_false);
 
         let mut context = SampleContext::new();
-        conditional.evaluate_arithmetic(&mut context);
+        let result = conditional.evaluate_arithmetic(&mut context).unwrap();
+        assert_eq!(result, 10.0);
     }
 
     #[test]
-    #[should_panic(expected = "Boolean binary operations not implemented")]
-    fn test_evaluate_bool_panic_on_binary_op() {
+    fn test_evaluate_bool_err_on_binary_op() {
         let left = ComputationNode::leaf(|| true);
         let right = ComputationNode::leaf(|| false);
         let binary_op = ComputationNode::binary_op(left, right, BinaryOperation::Add);
 
         let mut context = SampleContext::new();
-        binary_op.evaluate_bool(&mut context);
+        let err = binary_op.evaluate_bool(&mut context).unwrap_err();
+        assert_eq!(
+            err,
+            UncertainError::unsupported_node("Leaf, UnaryOp, or Conditional", "BinaryOp")
+        );
     }
 
     #[test]
@@ -1606,7 +1594,32 @@ mod tests {
         };
 
         let mut context = SampleContext::new();
-        let result = filtered.evaluate(&mut context);
+        let result = filtered.evaluate(&mut context).unwrap();
+        assert_eq!(result, 42.0); // Filter currently just passes through
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_evaluate_unary_map_operation() {
+        let operand = ComputationNode::leaf(|| 5.0);
+        let mapped = ComputationNode::map(operand, |x| x * 2.0);
+
+        let mut context = SampleContext::new();
+        let result = mapped.evaluate(&mut context).unwrap();
+        assert_eq!(result, 10.0);
+    }
+
+    #[test]
+    #[allow(clippy::float_cmp)]
+    fn test_evaluate_arithmetic_unary_filter_operation() {
+        let operand = ComputationNode::leaf(|| 42.0);
+        let filtered = ComputationNode::UnaryOp {
+            operand: Box::new(operand),
+            operation: UnaryOperation::Filter(Arc::new(|x: &f64| *x > 0.0)),
+        };
+
+        let mut context = SampleContext::new();
+        let result = filtered.evaluate_arithmetic(&mut context).unwrap();
         assert_eq!(result, 42.0); // Filter currently just passes through
     }
 
@@ -1886,7 +1899,7 @@ mod tests {
         let conditional = ComputationNode::conditional(condition, if_true, if_false);
 
         let mut context = SampleContext::new();
-        let result = conditional.evaluate_bool(&mut context);
+        let result = conditional.evaluate_bool(&mut context).unwrap();
         assert!(result);
     }
 
@@ -1896,8 +1909,47 @@ mod tests {
         let mapped = ComputationNode::map(operand, |x| !x);
 
         let mut context = SampleContext::new();
-        let result = mapped.evaluate_bool(&mut context);
+        let result = mapped.evaluate_bool(&mut context).unwrap();
         assert!(!result);
+    }
+
+    #[test]
+    fn test_bool_conditional_evaluation_false_branch() {
+        let condition = ComputationNode::leaf(|| false);
+        let if_true = ComputationNode::leaf(|| true);
+        let if_false = ComputationNode::leaf(|| false);
+        let conditional = ComputationNode::conditional(condition, if_true, if_false);
+
+        let mut context = SampleContext::new();
+        let result = conditional.evaluate_bool(&mut context).unwrap();
+        assert!(!result);
+    }
+
+    #[test]
+    fn test_bool_leaf_memoization() {
+        let mut context = SampleContext::new();
+        let leaf_id = uuid::Uuid::new_v4();
+        let leaf = ComputationNode::Leaf {
+            id: leaf_id,
+            sample: Arc::new(rand::random::<bool>),
+        };
+
+        let val1 = leaf.evaluate_bool(&mut context).unwrap();
+        let val2 = leaf.evaluate_bool(&mut context).unwrap();
+        assert_eq!(val1, val2);
+    }
+
+    #[test]
+    fn test_bool_unary_filter_operation() {
+        let operand = ComputationNode::leaf(|| true);
+        let filtered = ComputationNode::UnaryOp {
+            operand: Box::new(operand),
+            operation: UnaryOperation::Filter(Arc::new(|x: &bool| *x)),
+        };
+
+        let mut context = SampleContext::new();
+        let result = filtered.evaluate_bool(&mut context).unwrap();
+        assert!(result); // Filter currently just passes through
     }
 
     #[test]
@@ -1952,18 +2004,18 @@ mod tests {
 
     #[test]
     #[allow(clippy::float_cmp)]
-    fn test_evaluate_conditional_with_arithmetic() {
+    fn test_evaluate_arithmetic_total_dispatch() {
         let condition = ComputationNode::leaf(|| true);
         let if_true = ComputationNode::leaf(|| 42.0);
         let if_false = ComputationNode::leaf(|| 24.0);
         let conditional = ComputationNode::conditional(condition, if_true, if_false);
 
         let mut context = SampleContext::new();
-        let result = conditional.evaluate_conditional_with_arithmetic(&mut context);
+        let result = conditional.evaluate_arithmetic(&mut context).unwrap();
         assert_eq!(result, 42.0);
 
         let leaf = ComputationNode::leaf(|| 99.0);
-        let result = leaf.evaluate_conditional_with_arithmetic(&mut context);
+        let result = leaf.evaluate_arithmetic(&mut context).unwrap();
         assert_eq!(result, 99.0);
     }
 

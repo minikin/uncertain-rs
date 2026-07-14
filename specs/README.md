@@ -14,7 +14,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 | 03 | [Remove sampling-based Eq/Ord](03-remove-sampling-eq.md) | P0 | Low | **yes** | Implemented |
 | 04 | [Seedable RNG & reproducibility](04-seedable-rng.md) | P0 | High | no | Implemented |
 | 05 | [Correct sampling via rand_distr](05-rand-distr-sampling.md) | P0 | Medium | no | Implemented |
-| 06 | [Total graph evaluation](06-total-graph-evaluation.md) | P0 | Medium | **yes** | Pending |
+| 06 | [Total graph evaluation](06-total-graph-evaluation.md) | P0 | Medium | **yes** | Implemented |
 | 07 | [Sound constant folding](07-sound-constant-folding.md) | P0 | Medium | no | Pending |
 | 08 | [Effective CSE](08-effective-cse.md) | P1 | Medium | no | Pending |
 | 09 | [Consistent variance policy](09-variance-policy.md) | P1 | Low | behavioral | Pending |
@@ -47,12 +47,16 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
    (`scale`/`lambda` of `0`), handled via special-casing before ever calling
    `rand_distr`; measured a 65.5% speedup for normal sampling.)*
 3. **02, 03, 06, 18** — the breaking API changes, batched into one 0.3.0 release.
-   *(02, 03, 18 implemented. 02's statistics-entry-point-validation half was split out to
+   *(All four implemented. 02's statistics-entry-point-validation half was split out to
    18 — see 02's spec for why: a comparably large, independently-shippable ripple through
-   a different module. 18 validates at construction time for `LazyStats`/
-   `AdaptiveLazyStats` (sample count fixed once, reused by every accessor) and at call
-   time everywhere else (sample count/quantile/confidence/bandwidth are genuine per-call
-   parameters) — see 18's spec for the full per-method breakdown.)*
+   a different module. 06 kept `evaluate`/`evaluate_arithmetic`/`evaluate_bool` as three
+   separate `Result`-returning dispatchers, one total per value domain, rather than one
+   dispatcher wrapped three ways — see 06's spec's implementation notes for why a single
+   dispatcher isn't meaningful across domains with different trait bounds. 18 validates
+   at construction time for `LazyStats`/`AdaptiveLazyStats` (sample count fixed once,
+   reused by every accessor) and at call time everywhere else (sample
+   count/quantile/confidence/bandwidth are genuine per-call parameters) — see 18's spec
+   for the full per-method breakdown.)*
 4. **07 → 08** — optimizer correctness before optimizer effectiveness.
 5. **09, 10, 11, 14, 15, 17, 19** in any order.
 6. **12, 13, 16** — feature/polish tail.
