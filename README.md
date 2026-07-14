@@ -85,8 +85,8 @@ fn main() {
     println!("Product sample: {}", product.sample());
 
     // Statistical analysis
-    println!("Sum mean: {}", sum.expected_value(1000));
-    println!("Sum std dev: {}", sum.standard_deviation(1000));
+    println!("Sum mean: {}", sum.expected_value(1000).unwrap());
+    println!("Sum std dev: {}", sum.standard_deviation(1000).unwrap());
 }
 ```
 

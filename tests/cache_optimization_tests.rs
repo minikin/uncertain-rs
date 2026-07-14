@@ -7,9 +7,9 @@ fn test_improved_cache_hit_rates_with_quantization() {
 
     let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
-    let _result1 = normal.cdf(1.0001, 1000);
-    let _result2 = normal.cdf(1.0002, 1000); // Should hit cache due to quantization
-    let _result3 = normal.cdf(1.0009, 1000); // Should hit cache due to quantization
+    let _result1 = normal.cdf(1.0001, 1000).unwrap();
+    let _result2 = normal.cdf(1.0002, 1000).unwrap(); // Should hit cache due to quantization
+    let _result3 = normal.cdf(1.0009, 1000).unwrap(); // Should hit cache due to quantization
 
     let (stats_stats, _) = cache::global_cache_stats();
 
@@ -31,8 +31,8 @@ fn test_adaptive_sampling_convergence() {
         growth_factor: 1.5,
     };
 
-    let adaptive_mean = normal.expected_value_adaptive(&config);
-    let fixed_mean = normal.expected_value(1000);
+    let adaptive_mean = normal.expected_value_adaptive(&config).unwrap();
+    let fixed_mean = normal.expected_value(1000).unwrap();
 
     assert!((adaptive_mean - fixed_mean).abs() < 1.0);
     assert!(adaptive_mean > 8.0 && adaptive_mean < 12.0);
@@ -43,7 +43,7 @@ fn test_cache_statistics_tracking() {
     cache::clear_global_caches();
 
     let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    let stats = normal.lazy_stats(1000);
+    let stats = normal.lazy_stats(1000).unwrap();
 
     let mean1 = stats.mean();
     let mean2 = stats.mean(); // Should reuse cached samples and mean
@@ -55,8 +55,8 @@ fn test_cache_statistics_tracking() {
 
     // Test that the old cache-based methods still work for backward compatibility
     // These may not use global cache anymore but should still provide consistent results
-    let _result1 = normal.expected_value(1000);
-    let _result2 = normal.expected_value(1000);
+    let _result1 = normal.expected_value(1000).unwrap();
+    let _result2 = normal.expected_value(1000).unwrap();
     // Results should be statistically similar even if not cached
 }
 
@@ -176,11 +176,11 @@ fn test_complex_computation_graph_performance() {
     let complex_expr = (sum * diff * div) + y_squared;
 
     // First evaluation - should populate caches
-    let result1 = complex_expr.expected_value(1000);
+    let result1 = complex_expr.expected_value(1000).unwrap();
     let (_stats_after_first, _) = cache::global_cache_stats();
 
     // Second evaluation - should benefit from caching
-    let result2 = complex_expr.expected_value(1000);
+    let result2 = complex_expr.expected_value(1000).unwrap();
     let (_stats_after_second, _) = cache::global_cache_stats();
 
     // With the new lazy evaluation approach, results may vary
@@ -196,9 +196,9 @@ fn test_cache_performance_report() {
     let normal = Uncertain::normal(0.0, 1.0).unwrap();
 
     for i in 0..10 {
-        let _ = normal.expected_value(100 * (i + 1));
-        let _ = normal.variance(100 * (i + 1));
-        let _ = normal.standard_deviation(100 * (i + 1));
+        let _ = normal.expected_value(100 * (i + 1)).unwrap();
+        let _ = normal.variance(100 * (i + 1)).unwrap();
+        let _ = normal.standard_deviation(100 * (i + 1)).unwrap();
     }
 
     cache::print_cache_report();
@@ -234,9 +234,9 @@ fn test_different_precision_cache_hits() {
 
     // These values should map to the same quantized key
     let confidence_intervals = [
-        normal.confidence_interval(0.9501, 1000),
-        normal.confidence_interval(0.9502, 1000), // Should hit cache
-        normal.confidence_interval(0.9509, 1000), // Should hit cache
+        normal.confidence_interval(0.9501, 1000).unwrap(),
+        normal.confidence_interval(0.9502, 1000).unwrap(), // Should hit cache
+        normal.confidence_interval(0.9509, 1000).unwrap(), // Should hit cache
     ];
 
     let (stats, _) = cache::global_cache_stats();

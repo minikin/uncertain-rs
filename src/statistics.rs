@@ -7,11 +7,51 @@
 use crate::Uncertain;
 use crate::cache;
 use crate::computation::AdaptiveSampling;
+use crate::error::UncertainError;
 use crate::traits::Shareable;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
+
+/// Validates that a sample count is usable (statistics from zero samples are undefined).
+fn validate_sample_count(sample_count: usize) -> Result<(), UncertainError> {
+    if sample_count == 0 {
+        Err(UncertainError::invalid_sample_count(
+            sample_count,
+            "cannot compute statistics from zero samples",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+/// Validates that a quantile request is in the well-defined `[0, 1]` range.
+fn validate_quantile(q: f64) -> Result<(), UncertainError> {
+    if (0.0..=1.0).contains(&q) {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_quantile(q))
+    }
+}
+
+/// Validates that a confidence level is in the well-defined `(0, 1)` range.
+fn validate_confidence(confidence: f64) -> Result<(), UncertainError> {
+    if confidence > 0.0 && confidence < 1.0 {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_confidence(confidence))
+    }
+}
+
+/// Validates that a KDE bandwidth is strictly positive.
+fn validate_bandwidth(bandwidth: f64) -> Result<(), UncertainError> {
+    if bandwidth > 0.0 {
+        Ok(())
+    } else {
+        Err(UncertainError::invalid_bandwidth(bandwidth))
+    }
+}
 
 /// Lazy statistical computation wrapper that defers expensive operations
 /// until they are actually needed and caches intermediate results
@@ -48,16 +88,20 @@ where
         }
     }
     /// Create a new lazy statistics wrapper
-    #[must_use]
-    pub fn new(uncertain: &Uncertain<T>, sample_count: usize) -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn new(uncertain: &Uncertain<T>, sample_count: usize) -> Result<Self, UncertainError> {
+        validate_sample_count(sample_count)?;
+        Ok(Self {
             uncertain: Arc::new(uncertain.clone()),
             sample_count,
             samples_cache: RefCell::new(None),
             mean_cache: RefCell::new(None),
             variance_cache: RefCell::new(None),
             sorted_samples_cache: RefCell::new(None),
-        }
+        })
     }
 
     /// Get samples, computing them only once
@@ -117,37 +161,45 @@ where
     }
 
     /// Get quantile using linear interpolation for more accurate results
-    pub fn quantile(&self, q: f64) -> f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidQuantile` if `q` is outside `[0, 1]`.
+    pub fn quantile(&self, q: f64) -> Result<f64, UncertainError>
     where
         T: PartialOrd,
     {
+        validate_quantile(q)?;
+        // `sorted_samples()` is never empty: `sample_count > 0` is enforced by `new`.
         let samples = self.sorted_samples();
-        if samples.is_empty() {
-            return 0.0;
-        }
         if samples.len() == 1 {
-            return samples[0];
+            return Ok(samples[0]);
         }
 
         let position = q * (samples.len() - 1) as f64;
         let lower_idx = position.floor() as usize;
         let upper_idx = position.ceil() as usize;
 
-        if lower_idx == upper_idx {
+        Ok(if lower_idx == upper_idx {
             samples[lower_idx.min(samples.len() - 1)]
         } else {
             let lower_val = samples[lower_idx];
             let upper_val = samples[upper_idx.min(samples.len() - 1)];
             let weight = position - lower_idx as f64;
             lower_val + weight * (upper_val - lower_val)
-        }
+        })
     }
 
     /// Get confidence interval using cached sorted samples
-    pub fn confidence_interval(&self, confidence: f64) -> (f64, f64)
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidConfidence` if `confidence` is outside `(0, 1)`.
+    pub fn confidence_interval(&self, confidence: f64) -> Result<(f64, f64), UncertainError>
     where
         T: PartialOrd,
     {
+        validate_confidence(confidence)?;
         let samples = self.sorted_samples();
         let alpha = 1.0 - confidence;
         let lower_idx = ((alpha / 2.0) * samples.len() as f64) as usize;
@@ -156,7 +208,7 @@ where
         let lower_idx = lower_idx.min(samples.len() - 1);
         let upper_idx = upper_idx.min(samples.len() - 1);
 
-        (samples[lower_idx], samples[upper_idx])
+        Ok((samples[lower_idx], samples[upper_idx]))
     }
 }
 
@@ -261,15 +313,23 @@ where
     T: Shareable + Into<f64> + Clone,
 {
     /// Create a new adaptive lazy statistics wrapper
-    #[must_use]
-    pub fn new(uncertain: &Uncertain<T>, config: &AdaptiveSampling) -> Self {
-        Self {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `config.min_samples` is zero (with it,
+    /// the exponential growth from zero never advances and convergence never terminates).
+    pub fn new(
+        uncertain: &Uncertain<T>,
+        config: &AdaptiveSampling,
+    ) -> Result<Self, UncertainError> {
+        validate_sample_count(config.min_samples)?;
+        Ok(Self {
             uncertain: Arc::new(uncertain.clone()),
             config: config.clone(),
             progressive_stats: RefCell::new(ProgressiveStats::new()),
             current_samples: RefCell::new(0),
             converged_stats: RefCell::new(HashMap::new()),
-        }
+        })
     }
 
     /// Add more samples until we reach the target count or convergence
@@ -402,28 +462,29 @@ where
     /// probs.insert("green", 0.2);
     ///
     /// let categorical = Uncertain::categorical(&probs).unwrap();
-    /// let mode = categorical.mode(1000);
+    /// let mode = categorical.mode(1000).unwrap();
     /// // Should likely be "red"
     /// ```
-    #[must_use]
-    pub fn mode(&self, sample_count: usize) -> Option<T>
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn mode(&self, sample_count: usize) -> Result<Option<T>, UncertainError>
     where
         T: Hash + Eq,
     {
+        validate_sample_count(sample_count)?;
         let samples = self.take_samples(sample_count);
-        if samples.is_empty() {
-            return None;
-        }
 
         let mut counts = HashMap::new();
         for sample in samples {
             *counts.entry(sample).or_insert(0) += 1;
         }
 
-        counts
+        Ok(counts
             .into_iter()
             .max_by_key(|(_, count)| *count)
-            .map(|(value, _)| value)
+            .map(|(value, _)| value))
     }
 
     /// Creates a histogram of the distribution
@@ -433,14 +494,18 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let bernoulli = Uncertain::bernoulli(0.7).unwrap();
-    /// let histogram = bernoulli.histogram(1000);
+    /// let histogram = bernoulli.histogram(1000).unwrap();
     /// // Should show roughly 700 true, 300 false
     /// ```
-    #[must_use]
-    pub fn histogram(&self, sample_count: usize) -> HashMap<T, usize>
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn histogram(&self, sample_count: usize) -> Result<HashMap<T, usize>, UncertainError>
     where
         T: Hash + Eq,
     {
+        validate_sample_count(sample_count)?;
         let samples = self.take_samples(sample_count);
         let mut histogram = HashMap::new();
 
@@ -448,7 +513,7 @@ where
             *histogram.entry(sample).or_insert(0) += 1;
         }
 
-        histogram
+        Ok(histogram)
     }
 
     /// Calculates the empirical entropy of the distribution in bits
@@ -458,24 +523,27 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let uniform_coin = Uncertain::bernoulli(0.5).unwrap();
-    /// let entropy = uniform_coin.entropy(1000);
+    /// let entropy = uniform_coin.entropy(1000).unwrap();
     /// // Should be close to 1.0 bit for fair coin
     /// ```
-    #[must_use]
-    pub fn entropy(&self, sample_count: usize) -> f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn entropy(&self, sample_count: usize) -> Result<f64, UncertainError>
     where
         T: Hash + Eq,
     {
-        let histogram = self.histogram(sample_count);
+        let histogram = self.histogram(sample_count)?;
         let total = sample_count as f64;
 
-        histogram
+        Ok(histogram
             .values()
             .map(|&count| {
                 let p = count as f64 / total;
                 if p > 0.0 { -p * p.log2() } else { 0.0 }
             })
-            .sum()
+            .sum())
     }
 }
 
@@ -496,28 +564,34 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
-    /// let stats = normal.lazy_stats(1000);
+    /// let stats = normal.lazy_stats(1000).unwrap();
     ///
     /// // All of these reuse the same 1000 samples:
     /// let mean = stats.mean();              // Computes samples once
     /// let variance = stats.variance();      // Reuses samples and mean
     /// let std_dev = stats.std_dev();        // Reuses variance
-    /// let median = stats.quantile(0.5);     // Reuses sorted samples
-    /// let (lo, hi) = stats.confidence_interval(0.95); // Reuses sorted samples
+    /// let median = stats.quantile(0.5).unwrap();     // Reuses sorted samples
+    /// let (lo, hi) = stats.confidence_interval(0.95).unwrap(); // Reuses sorted samples
     ///
     /// // This is much more efficient than calling individual methods:
     /// // normal.expected_value(1000), normal.variance(1000), etc.
     /// ```
-    #[must_use]
-    pub fn lazy_stats(&self, sample_count: usize) -> LazyStats<T> {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn lazy_stats(&self, sample_count: usize) -> Result<LazyStats<T>, UncertainError> {
         LazyStats::new(self, sample_count)
     }
 
     /// Get statistics using lazy evaluation (alias for `lazy_stats`)
     ///
     /// This is provided as a more concise alias for users who prefer shorter method names.
-    #[must_use]
-    pub fn stats(&self, sample_count: usize) -> LazyStats<T> {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn stats(&self, sample_count: usize) -> Result<LazyStats<T>, UncertainError> {
         LazyStats::new(self, sample_count)
     }
 
@@ -552,16 +626,23 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let stats = normal.compute_stats_batch(1000);
+    /// let stats = normal.compute_stats_batch(1000).unwrap();
     ///
     /// println!("Mean: {}, Std Dev: {}, Range: {}",
     ///          stats.mean(), stats.std_dev(), stats.range());
     /// ```
-    #[must_use]
-    pub fn compute_stats_batch(&self, sample_count: usize) -> ProgressiveStats
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn compute_stats_batch(
+        &self,
+        sample_count: usize,
+    ) -> Result<ProgressiveStats, UncertainError>
     where
         T: Into<f64>,
     {
+        validate_sample_count(sample_count)?;
         let mut stats = ProgressiveStats::new();
         let samples = self.take_samples(sample_count);
 
@@ -569,7 +650,7 @@ where
             stats.add_sample(sample.into());
         }
 
-        stats
+        Ok(stats)
     }
 }
 
@@ -589,27 +670,33 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
-    /// let mean = normal.expected_value(1000);
+    /// let mean = normal.expected_value(1000).unwrap();
     /// // Should be approximately 10.0
     ///
     /// // For multiple stats, use lazy_stats for better performance:
-    /// let stats = normal.lazy_stats(1000);
+    /// let stats = normal.lazy_stats(1000).unwrap();
     /// let mean = stats.mean();
     /// let variance = stats.variance(); // Reuses same samples
     /// ```
-    #[must_use]
-    pub fn expected_value(&self, sample_count: usize) -> f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn expected_value(&self, sample_count: usize) -> Result<f64, UncertainError>
     where
         T: Into<f64>,
     {
-        cache::stats_cache().get_or_compute_expected_value(self.id, sample_count, || {
-            let samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
-            samples.iter().sum::<f64>() / sample_count as f64
-        })
+        validate_sample_count(sample_count)?;
+        Ok(
+            cache::stats_cache().get_or_compute_expected_value(self.id, sample_count, || {
+                let samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
+                samples.iter().sum::<f64>() / sample_count as f64
+            }),
+        )
     }
 
     /// Calculates the expected value using adaptive sampling for better efficiency
@@ -624,21 +711,27 @@ where
     ///
     /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
     /// let config = AdaptiveSampling::default();
-    /// let mean = normal.expected_value_adaptive(&config);
+    /// let mean = normal.expected_value_adaptive(&config).unwrap();
     /// // Should be approximately 10.0 with optimal sample count
     /// ```
-    #[must_use]
-    pub fn expected_value_adaptive(&self, config: &AdaptiveSampling) -> f64 {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `config.min_samples` is zero.
+    pub fn expected_value_adaptive(
+        &self,
+        config: &AdaptiveSampling,
+    ) -> Result<f64, UncertainError> {
         let mut sample_count = config.min_samples;
         let mut prev_mean = 0.0;
 
         loop {
-            let mean = self.expected_value(sample_count);
+            let mean = self.expected_value(sample_count)?;
 
             if sample_count > config.min_samples {
                 let relative_error = ((mean - prev_mean) / mean).abs();
                 if relative_error < config.error_threshold || sample_count >= config.max_samples {
-                    return mean;
+                    return Ok(mean);
                 }
             }
 
@@ -658,14 +751,20 @@ where
     ///
     /// let normal = Uncertain::normal(10.0, 2.0).unwrap();
     /// let config = AdaptiveSampling::default();
-    /// let lazy_stats = normal.adaptive_lazy_stats(&config);
+    /// let lazy_stats = normal.adaptive_lazy_stats(&config).unwrap();
     ///
     /// // Automatically uses optimal sample count for each statistic
     /// let mean = lazy_stats.mean();
     /// let std_dev = lazy_stats.std_dev();
     /// ```
-    #[must_use]
-    pub fn adaptive_lazy_stats(&self, config: &AdaptiveSampling) -> AdaptiveLazyStats<T> {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `config.min_samples` is zero.
+    pub fn adaptive_lazy_stats(
+        &self,
+        config: &AdaptiveSampling,
+    ) -> Result<AdaptiveLazyStats<T>, UncertainError> {
         AdaptiveLazyStats::new(self, config)
     }
 
@@ -680,38 +779,44 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 2.0).unwrap();
-    /// let variance = normal.variance(1000);
+    /// let variance = normal.variance(1000).unwrap();
     /// // Should be approximately 4.0 (std_dev^2)
     ///
     /// // For multiple stats, use lazy_stats for better performance:
-    /// let stats = normal.lazy_stats(1000);
+    /// let stats = normal.lazy_stats(1000).unwrap();
     /// let variance = stats.variance();
     /// let std_dev = stats.std_dev(); // Reuses variance calculation
     /// ```
-    #[must_use]
-    pub fn variance(&self, sample_count: usize) -> f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn variance(&self, sample_count: usize) -> Result<f64, UncertainError>
     where
         T: Into<f64>,
     {
-        cache::stats_cache().get_or_compute_variance(self.id, sample_count, || {
-            let samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+        validate_sample_count(sample_count)?;
+        Ok(
+            cache::stats_cache().get_or_compute_variance(self.id, sample_count, || {
+                let samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
 
-            let mean = samples.iter().sum::<f64>() / sample_count as f64;
+                let mean = samples.iter().sum::<f64>() / sample_count as f64;
 
-            // Use numerically stable variance calculation
-            samples
-                .iter()
-                .map(|x| {
-                    let diff = x - mean;
-                    diff * diff
-                })
-                .sum::<f64>()
-                / sample_count as f64
-        })
+                // Use numerically stable variance calculation
+                samples
+                    .iter()
+                    .map(|x| {
+                        let diff = x - mean;
+                        diff * diff
+                    })
+                    .sum::<f64>()
+                    / sample_count as f64
+            }),
+        )
     }
 
     /// Calculates the standard deviation of the distribution
@@ -725,20 +830,23 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 2.0).unwrap();
-    /// let std_dev = normal.standard_deviation(1000);
+    /// let std_dev = normal.standard_deviation(1000).unwrap();
     /// // Should be approximately 2.0
     ///
     /// // For multiple stats, use lazy_stats for better performance:
-    /// let stats = normal.lazy_stats(1000);
+    /// let stats = normal.lazy_stats(1000).unwrap();
     /// let std_dev = stats.std_dev();
     /// let variance = stats.variance(); // Reuses same samples
     /// ```
-    #[must_use]
-    pub fn standard_deviation(&self, sample_count: usize) -> f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn standard_deviation(&self, sample_count: usize) -> Result<f64, UncertainError>
     where
         T: Into<f64>,
     {
-        self.variance(sample_count).sqrt()
+        Ok(self.variance(sample_count)?.sqrt())
     }
 
     /// Calculates the skewness of the distribution
@@ -750,32 +858,40 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let skewness = normal.skewness(1000);
+    /// let skewness = normal.skewness(1000).unwrap();
     /// // Should be approximately 0 for normal distribution
     /// ```
-    #[must_use]
-    pub fn skewness(&self, sample_count: usize) -> f64 {
-        cache::stats_cache().get_or_compute_skewness(self.id, sample_count, || {
-            let samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn skewness(&self, sample_count: usize) -> Result<f64, UncertainError> {
+        validate_sample_count(sample_count)?;
+        Ok(
+            cache::stats_cache().get_or_compute_skewness(self.id, sample_count, || {
+                let samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
 
-            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
-            let std_dev = self.standard_deviation(sample_count);
+                let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+                let std_dev = self
+                    .standard_deviation(sample_count)
+                    .expect("sample_count already validated");
 
-            if std_dev == 0.0 {
-                return 0.0;
-            }
+                if std_dev == 0.0 {
+                    return 0.0;
+                }
 
-            let n = samples.len() as f64;
-            samples
-                .iter()
-                .map(|x| ((x - mean) / std_dev).powi(3))
-                .sum::<f64>()
-                / n
-        })
+                let n = samples.len() as f64;
+                samples
+                    .iter()
+                    .map(|x| ((x - mean) / std_dev).powi(3))
+                    .sum::<f64>()
+                    / n
+            }),
+        )
     }
 
     /// Calculates the excess kurtosis of the distribution
@@ -787,34 +903,42 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let kurtosis = normal.kurtosis(1000);
+    /// let kurtosis = normal.kurtosis(1000).unwrap();
     /// // Should be approximately 0 for normal distribution (excess kurtosis)
     /// ```
-    #[must_use]
-    pub fn kurtosis(&self, sample_count: usize) -> f64 {
-        cache::stats_cache().get_or_compute_kurtosis(self.id, sample_count, || {
-            let samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn kurtosis(&self, sample_count: usize) -> Result<f64, UncertainError> {
+        validate_sample_count(sample_count)?;
+        Ok(
+            cache::stats_cache().get_or_compute_kurtosis(self.id, sample_count, || {
+                let samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
 
-            let mean = samples.iter().sum::<f64>() / samples.len() as f64;
-            let std_dev = self.standard_deviation(sample_count);
+                let mean = samples.iter().sum::<f64>() / samples.len() as f64;
+                let std_dev = self
+                    .standard_deviation(sample_count)
+                    .expect("sample_count already validated");
 
-            if std_dev == 0.0 {
-                return 0.0;
-            }
+                if std_dev == 0.0 {
+                    return 0.0;
+                }
 
-            let n = samples.len() as f64;
-            let kurt = samples
-                .iter()
-                .map(|x| ((x - mean) / std_dev).powi(4))
-                .sum::<f64>()
-                / n;
+                let n = samples.len() as f64;
+                let kurt = samples
+                    .iter()
+                    .map(|x| ((x - mean) / std_dev).powi(4))
+                    .sum::<f64>()
+                    / n;
 
-            kurt - 3.0 // Excess kurtosis (subtract 3 for normal distribution baseline)
-        })
+                kurt - 3.0 // Excess kurtosis (subtract 3 for normal distribution baseline)
+            }),
+        )
     }
 }
 
@@ -834,20 +958,30 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(100.0, 15.0).unwrap();
-    /// let (lower, upper) = normal.confidence_interval(0.95, 1000);
+    /// let (lower, upper) = normal.confidence_interval(0.95, 1000).unwrap();
     /// // 95% of values should fall between lower and upper
     ///
     /// // For multiple stats, use lazy_stats for better performance:
-    /// let stats = normal.lazy_stats(1000);
-    /// let (lower, upper) = stats.confidence_interval(0.95);
-    /// let median = stats.quantile(0.5); // Reuses sorted samples
+    /// let stats = normal.lazy_stats(1000).unwrap();
+    /// let (lower, upper) = stats.confidence_interval(0.95).unwrap();
+    /// let median = stats.quantile(0.5).unwrap(); // Reuses sorted samples
     /// ```
-    #[must_use]
-    pub fn confidence_interval(&self, confidence: f64, sample_count: usize) -> (f64, f64)
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidConfidence` if `confidence` is outside `(0, 1)`, or
+    /// `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn confidence_interval(
+        &self,
+        confidence: f64,
+        sample_count: usize,
+    ) -> Result<(f64, f64), UncertainError>
     where
         T: Into<f64> + PartialOrd,
     {
-        cache::stats_cache().get_or_compute_confidence_interval(
+        validate_confidence(confidence)?;
+        validate_sample_count(sample_count)?;
+        Ok(cache::stats_cache().get_or_compute_confidence_interval(
             self.id,
             sample_count,
             confidence,
@@ -869,7 +1003,7 @@ where
 
                 (samples[lower_idx], samples[upper_idx])
             },
-        )
+        ))
     }
 
     /// Estimates the cumulative distribution function (CDF) at a given value
@@ -881,21 +1015,27 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let prob = normal.cdf(0.0, 1000);
+    /// let prob = normal.cdf(0.0, 1000).unwrap();
     /// // Should be approximately 0.5 for standard normal at 0
     /// ```
-    #[must_use]
-    pub fn cdf(&self, value: f64, sample_count: usize) -> f64 {
-        cache::stats_cache().get_or_compute_cdf(self.id, sample_count, value, || {
-            let samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn cdf(&self, value: f64, sample_count: usize) -> Result<f64, UncertainError> {
+        validate_sample_count(sample_count)?;
+        Ok(
+            cache::stats_cache().get_or_compute_cdf(self.id, sample_count, value, || {
+                let samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
 
-            let count = samples.iter().filter(|&&x| x <= value).count();
-            count as f64 / samples.len() as f64
-        })
+                let count = samples.iter().filter(|&&x| x <= value).count();
+                count as f64 / samples.len() as f64
+            }),
+        )
     }
 
     /// Estimates quantiles of the distribution using linear interpolation
@@ -909,49 +1049,54 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let median = normal.quantile(0.5, 1000);
+    /// let median = normal.quantile(0.5, 1000).unwrap();
     /// // Should be approximately 0.0 for standard normal
     ///
     /// // For multiple quantiles, use lazy_stats for better performance:
-    /// let stats = normal.lazy_stats(1000);
-    /// let q25 = stats.quantile(0.25);
-    /// let q75 = stats.quantile(0.75); // Reuses sorted samples
+    /// let stats = normal.lazy_stats(1000).unwrap();
+    /// let q25 = stats.quantile(0.25).unwrap();
+    /// let q75 = stats.quantile(0.75).unwrap(); // Reuses sorted samples
     /// ```
-    #[must_use]
-    pub fn quantile(&self, q: f64, sample_count: usize) -> f64
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidQuantile` if `q` is outside `[0, 1]`, or
+    /// `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn quantile(&self, q: f64, sample_count: usize) -> Result<f64, UncertainError>
     where
         T: Into<f64> + PartialOrd,
     {
-        cache::stats_cache().get_or_compute_quantile(self.id, sample_count, q, || {
-            let mut samples: Vec<f64> = self
-                .take_samples(sample_count)
-                .into_iter()
-                .map(Into::into)
-                .collect();
+        validate_quantile(q)?;
+        validate_sample_count(sample_count)?;
+        Ok(
+            cache::stats_cache().get_or_compute_quantile(self.id, sample_count, q, || {
+                let mut samples: Vec<f64> = self
+                    .take_samples(sample_count)
+                    .into_iter()
+                    .map(Into::into)
+                    .collect();
 
-            samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                samples.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
-            if samples.is_empty() {
-                return 0.0;
-            }
+                // Never empty: `validate_sample_count` above enforces `sample_count > 0`.
+                if samples.len() == 1 {
+                    return samples[0];
+                }
 
-            if samples.len() == 1 {
-                return samples[0];
-            }
+                let position = q * (samples.len() - 1) as f64;
+                let lower_idx = position.floor() as usize;
+                let upper_idx = position.ceil() as usize;
 
-            let position = q * (samples.len() - 1) as f64;
-            let lower_idx = position.floor() as usize;
-            let upper_idx = position.ceil() as usize;
-
-            if lower_idx == upper_idx {
-                samples[lower_idx.min(samples.len() - 1)]
-            } else {
-                let lower_val = samples[lower_idx];
-                let upper_val = samples[upper_idx.min(samples.len() - 1)];
-                let weight = position - lower_idx as f64;
-                lower_val + weight * (upper_val - lower_val)
-            }
-        })
+                if lower_idx == upper_idx {
+                    samples[lower_idx.min(samples.len() - 1)]
+                } else {
+                    let lower_val = samples[lower_idx];
+                    let upper_val = samples[upper_idx.min(samples.len() - 1)];
+                    let weight = position - lower_idx as f64;
+                    lower_val + weight * (upper_val - lower_val)
+                }
+            }),
+        )
     }
 
     /// Calculates the interquartile range (IQR)
@@ -961,14 +1106,17 @@ where
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let iqr = normal.interquartile_range(1000);
+    /// let iqr = normal.interquartile_range(1000).unwrap();
     /// // IQR for standard normal is approximately 1.35
     /// ```
-    #[must_use]
-    pub fn interquartile_range(&self, sample_count: usize) -> f64 {
-        let q75 = self.quantile(0.75, sample_count);
-        let q25 = self.quantile(0.25, sample_count);
-        q75 - q25
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn interquartile_range(&self, sample_count: usize) -> Result<f64, UncertainError> {
+        let q75 = self.quantile(0.75, sample_count)?;
+        let q25 = self.quantile(0.25, sample_count)?;
+        Ok(q75 - q25)
     }
 
     /// Estimates the median absolute deviation (MAD)
@@ -977,27 +1125,30 @@ where
     ///
     /// Panics if the samples contain values that cannot be compared (e.g., NaN values).
     ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    ///
     /// # Example
     /// ```rust
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let mad = normal.median_absolute_deviation(1000);
+    /// let mad = normal.median_absolute_deviation(1000).unwrap();
     /// ```
-    #[must_use]
-    pub fn median_absolute_deviation(&self, sample_count: usize) -> f64 {
+    pub fn median_absolute_deviation(&self, sample_count: usize) -> Result<f64, UncertainError> {
         let samples: Vec<f64> = self
             .take_samples(sample_count)
             .into_iter()
             .map(std::convert::Into::into)
             .collect();
 
-        let median = self.quantile(0.5, sample_count);
+        let median = self.quantile(0.5, sample_count)?;
         let mut deviations: Vec<f64> = samples.iter().map(|x| (x - median).abs()).collect();
 
         deviations.sort_by(|a, b| a.partial_cmp(b).unwrap());
         let mad_index = (deviations.len() - 1) / 2;
-        deviations[mad_index]
+        Ok(deviations[mad_index])
     }
 }
 
@@ -1012,23 +1163,36 @@ impl Uncertain<f64> {
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let density = normal.pdf_kde(0.0, 1000, 0.1);
+    /// let density = normal.pdf_kde(0.0, 1000, 0.1).unwrap();
     /// ```
-    #[must_use]
-    pub fn pdf_kde(&self, x: f64, sample_count: usize, bandwidth: f64) -> f64 {
-        cache::dist_cache().get_or_compute_pdf_kde(self.id, sample_count, x, bandwidth, || {
-            let samples = self.take_samples(sample_count);
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero, or
+    /// `UncertainError::InvalidBandwidth` if `bandwidth` isn't strictly positive.
+    pub fn pdf_kde(
+        &self,
+        x: f64,
+        sample_count: usize,
+        bandwidth: f64,
+    ) -> Result<f64, UncertainError> {
+        validate_sample_count(sample_count)?;
+        validate_bandwidth(bandwidth)?;
+        Ok(
+            cache::dist_cache().get_or_compute_pdf_kde(self.id, sample_count, x, bandwidth, || {
+                let samples = self.take_samples(sample_count);
 
-            let kernel_sum: f64 = samples
-                .iter()
-                .map(|&xi| {
-                    let z = (x - xi) / bandwidth;
-                    (-0.5 * z * z).exp()
-                })
-                .sum();
+                let kernel_sum: f64 = samples
+                    .iter()
+                    .map(|&xi| {
+                        let z = (x - xi) / bandwidth;
+                        (-0.5 * z * z).exp()
+                    })
+                    .sum();
 
-            kernel_sum / (sample_count as f64 * bandwidth * (2.0 * std::f64::consts::PI).sqrt())
-        })
+                kernel_sum / (sample_count as f64 * bandwidth * (2.0 * std::f64::consts::PI).sqrt())
+            }),
+        )
     }
 
     /// Estimates the log-likelihood of a value using kernel density estimation
@@ -1038,16 +1202,25 @@ impl Uncertain<f64> {
     /// use uncertain_rs::Uncertain;
     ///
     /// let normal = Uncertain::normal(0.0, 1.0).unwrap();
-    /// let log_likelihood = normal.log_likelihood(0.0, 1000, 0.1);
+    /// let log_likelihood = normal.log_likelihood(0.0, 1000, 0.1).unwrap();
     /// ```
-    #[must_use]
-    pub fn log_likelihood(&self, x: f64, sample_count: usize, bandwidth: f64) -> f64 {
-        let pdf = self.pdf_kde(x, sample_count, bandwidth);
-        if pdf > 0.0 {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero, or
+    /// `UncertainError::InvalidBandwidth` if `bandwidth` isn't strictly positive.
+    pub fn log_likelihood(
+        &self,
+        x: f64,
+        sample_count: usize,
+        bandwidth: f64,
+    ) -> Result<f64, UncertainError> {
+        let pdf = self.pdf_kde(x, sample_count, bandwidth)?;
+        Ok(if pdf > 0.0 {
             pdf.ln()
         } else {
             f64::NEG_INFINITY
-        }
+        })
     }
 
     /// Estimates correlation with another uncertain value
@@ -1058,11 +1231,19 @@ impl Uncertain<f64> {
     ///
     /// let x = Uncertain::normal(0.0, 1.0).unwrap();
     /// let y = x.map(|v| v * 2.0 + Uncertain::normal(0.0, 0.5).unwrap().sample());
-    /// let correlation = x.correlation(&y, 1000);
+    /// let correlation = x.correlation(&y, 1000).unwrap();
     /// // Should be positive correlation
     /// ```
-    #[must_use]
-    pub fn correlation(&self, other: &Uncertain<f64>, sample_count: usize) -> f64 {
+    ///
+    /// # Errors
+    ///
+    /// Returns `UncertainError::InvalidSampleCount` if `sample_count` is zero.
+    pub fn correlation(
+        &self,
+        other: &Uncertain<f64>,
+        sample_count: usize,
+    ) -> Result<f64, UncertainError> {
+        validate_sample_count(sample_count)?;
         let samples_x = self.take_samples(sample_count);
         let samples_y = other.take_samples(sample_count);
 
@@ -1079,11 +1260,11 @@ impl Uncertain<f64> {
 
         let var_y: f64 = samples_y.iter().map(|y| (y - mean_y).powi(2)).sum();
 
-        if var_x * var_y > 0.0 {
+        Ok(if var_x * var_y > 0.0 {
             numerator / (var_x * var_y).sqrt()
         } else {
             0.0
-        }
+        })
     }
 }
 
@@ -1095,21 +1276,21 @@ mod tests {
     #[test]
     fn test_expected_value() {
         let normal = Uncertain::normal(10.0, 1.0).unwrap();
-        let mean = normal.expected_value(1000);
+        let mean = normal.expected_value(1000).unwrap();
         assert!((mean - 10.0).abs() < 0.2);
     }
 
     #[test]
     fn test_standard_deviation() {
         let normal = Uncertain::normal(0.0, 2.0).unwrap();
-        let std_dev = normal.standard_deviation(1000);
+        let std_dev = normal.standard_deviation(1000).unwrap();
         assert!((std_dev - 2.0).abs() < 0.3);
     }
 
     #[test]
     fn test_confidence_interval() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let (lower, upper) = normal.confidence_interval(0.95, 1000);
+        let (lower, upper) = normal.confidence_interval(0.95, 1000).unwrap();
 
         // For standard normal, 95% CI should be approximately [-1.96, 1.96]
         assert!(lower < -1.5 && lower > -2.5);
@@ -1119,7 +1300,7 @@ mod tests {
     #[test]
     fn test_cdf() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let prob = normal.cdf(0.0, 1000);
+        let prob = normal.cdf(0.0, 1000).unwrap();
 
         // For standard normal, P(X <= 0) should be approximately 0.5
         assert!((prob - 0.5).abs() < 0.1);
@@ -1128,7 +1309,7 @@ mod tests {
     #[test]
     fn test_quantile() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let median = normal.quantile(0.5, 1000);
+        let median = normal.quantile(0.5, 1000).unwrap();
 
         // Median of standard normal should be approximately 0
         assert!(median.abs() < 0.2);
@@ -1141,7 +1322,7 @@ mod tests {
         probs.insert("blue", 0.4);
 
         let categorical = Uncertain::categorical(&probs).unwrap();
-        let mode = categorical.mode(1000);
+        let mode = categorical.mode(1000).unwrap();
 
         // Mode should likely be "red" with 60% probability
         assert_eq!(mode, Some("red"));
@@ -1150,13 +1331,13 @@ mod tests {
     #[test]
     fn test_entropy() {
         let fair_coin = Uncertain::bernoulli(0.5).unwrap();
-        let entropy = fair_coin.entropy(1000);
+        let entropy = fair_coin.entropy(1000).unwrap();
 
         // Fair coin should have entropy close to 1 bit
         assert!((entropy - 1.0).abs() < 0.1);
 
         let biased_coin = Uncertain::bernoulli(0.9).unwrap();
-        let biased_entropy = biased_coin.entropy(1000);
+        let biased_entropy = biased_coin.entropy(1000).unwrap();
 
         // Biased coin should have lower entropy
         assert!(biased_entropy < entropy);
@@ -1165,7 +1346,7 @@ mod tests {
     #[test]
     fn test_skewness_normal() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let skewness = normal.skewness(1000);
+        let skewness = normal.skewness(1000).unwrap();
 
         // Normal distribution should have skewness close to 0
         assert!(skewness.abs() < 0.3);
@@ -1174,7 +1355,7 @@ mod tests {
     #[test]
     fn test_kurtosis_normal() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let kurtosis = normal.kurtosis(1000);
+        let kurtosis = normal.kurtosis(1000).unwrap();
 
         // Normal distribution should have excess kurtosis close to 0
         // Allow for some statistical variance in the test
@@ -1182,30 +1363,30 @@ mod tests {
     }
 
     #[test]
-    fn test_mode_empty_samples() {
+    fn test_mode_zero_sample_count_is_err() {
         let uncertain = Uncertain::new(|| None::<i32>);
-        let mode = uncertain.mode(0);
-        assert_eq!(mode, None);
+        let err = uncertain.mode(0).unwrap_err();
+        assert!(matches!(err, UncertainError::InvalidSampleCount { .. }));
     }
 
     #[test]
     fn test_mode_integers() {
         let uniform = Uncertain::new(|| if rand::random::<f64>() < 0.7 { 1 } else { 2 });
-        let mode = uniform.mode(1000);
+        let mode = uniform.mode(1000).unwrap();
         assert_eq!(mode, Some(1));
     }
 
     #[test]
-    fn test_histogram_empty() {
+    fn test_histogram_zero_sample_count_is_err() {
         let uncertain = Uncertain::new(|| 42);
-        let histogram = uncertain.histogram(0);
-        assert!(histogram.is_empty());
+        let err = uncertain.histogram(0).unwrap_err();
+        assert!(matches!(err, UncertainError::InvalidSampleCount { .. }));
     }
 
     #[test]
     fn test_histogram_bernoulli() {
         let bernoulli = Uncertain::bernoulli(0.3).unwrap();
-        let histogram = bernoulli.histogram(1000);
+        let histogram = bernoulli.histogram(1000).unwrap();
 
         let true_count = histogram.get(&true).copied().unwrap_or(0);
         let false_count = histogram.get(&false).copied().unwrap_or(0);
@@ -1220,36 +1401,36 @@ mod tests {
     #[test]
     fn test_variance_standalone() {
         let normal = Uncertain::normal(5.0, 3.0).unwrap();
-        let variance = normal.variance(1000);
+        let variance = normal.variance(1000).unwrap();
         assert!((variance - 9.0).abs() < 1.5);
     }
 
     #[test]
     fn test_variance_zero() {
         let constant = Uncertain::new(|| 42.0);
-        let variance = constant.variance(1000);
+        let variance = constant.variance(1000).unwrap();
         assert!(variance < 0.001);
     }
 
     #[test]
     fn test_skewness_zero_std_dev() {
         let constant = Uncertain::new(|| 5.0);
-        let skewness = constant.skewness(1000);
+        let skewness = constant.skewness(1000).unwrap();
         assert!(skewness.abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_kurtosis_zero_std_dev() {
         let constant = Uncertain::new(|| 5.0);
-        let kurtosis = constant.kurtosis(1000);
+        let kurtosis = constant.kurtosis(1000).unwrap();
         assert!(kurtosis.abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_pdf_kde() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let density_at_mean = normal.pdf_kde(0.0, 1000, 0.1);
-        let density_at_tail = normal.pdf_kde(3.0, 1000, 0.1);
+        let density_at_mean = normal.pdf_kde(0.0, 1000, 0.1).unwrap();
+        let density_at_tail = normal.pdf_kde(3.0, 1000, 0.1).unwrap();
 
         assert!(density_at_mean > density_at_tail);
         assert!(density_at_mean > 0.0);
@@ -1257,10 +1438,23 @@ mod tests {
     }
 
     #[test]
+    fn test_pdf_kde_non_positive_bandwidth_is_err() {
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
+        assert!(matches!(
+            normal.pdf_kde(0.0, 1000, 0.0).unwrap_err(),
+            UncertainError::InvalidBandwidth { .. }
+        ));
+        assert!(matches!(
+            normal.pdf_kde(0.0, 1000, -0.1).unwrap_err(),
+            UncertainError::InvalidBandwidth { .. }
+        ));
+    }
+
+    #[test]
     fn test_log_likelihood() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let ll_at_mean = normal.log_likelihood(0.0, 1000, 0.1);
-        let ll_at_tail = normal.log_likelihood(3.0, 1000, 0.1);
+        let ll_at_mean = normal.log_likelihood(0.0, 1000, 0.1).unwrap();
+        let ll_at_tail = normal.log_likelihood(3.0, 1000, 0.1).unwrap();
 
         assert!(ll_at_mean > ll_at_tail);
         assert!(ll_at_mean.is_finite());
@@ -1269,7 +1463,7 @@ mod tests {
     #[test]
     fn test_log_likelihood_zero_pdf() {
         let point = Uncertain::new(|| 0.0);
-        let ll = point.log_likelihood(10.0, 100, 0.01);
+        let ll = point.log_likelihood(10.0, 100, 0.01).unwrap();
         assert!(ll.is_infinite() && ll.is_sign_negative());
     }
 
@@ -1301,7 +1495,7 @@ mod tests {
             }
         });
 
-        let correlation = x.correlation(&y, 5);
+        let correlation = x.correlation(&y, 5).unwrap();
         assert!((correlation - 1.0).abs() < 0.001);
     }
 
@@ -1333,7 +1527,7 @@ mod tests {
             }
         });
 
-        let correlation = x.correlation(&y, 5);
+        let correlation = x.correlation(&y, 5).unwrap();
         assert!((correlation + 1.0).abs() < 0.001);
     }
 
@@ -1341,7 +1535,7 @@ mod tests {
     fn test_correlation_independent() {
         let x = Uncertain::normal(0.0, 1.0).unwrap();
         let y = Uncertain::normal(10.0, 1.0).unwrap();
-        let correlation = x.correlation(&y, 1000);
+        let correlation = x.correlation(&y, 1000).unwrap();
 
         assert!(correlation.abs() < 0.2);
     }
@@ -1350,7 +1544,7 @@ mod tests {
     fn test_correlation_zero_variance() {
         let x = Uncertain::new(|| 5.0);
         let y = Uncertain::normal(0.0, 1.0).unwrap();
-        let correlation = x.correlation(&y, 1000);
+        let correlation = x.correlation(&y, 1000).unwrap();
 
         assert!(correlation.abs() < f64::EPSILON);
     }
@@ -1358,7 +1552,7 @@ mod tests {
     #[test]
     fn test_interquartile_range() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let iqr = normal.interquartile_range(1000);
+        let iqr = normal.interquartile_range(1000).unwrap();
 
         assert!(iqr > 1.0);
         assert!(iqr < 2.0);
@@ -1367,7 +1561,7 @@ mod tests {
     #[test]
     fn test_median_absolute_deviation() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let mad = normal.median_absolute_deviation(1000);
+        let mad = normal.median_absolute_deviation(1000).unwrap();
 
         assert!(mad > 0.5);
         assert!(mad < 1.0);
@@ -1376,8 +1570,8 @@ mod tests {
     #[test]
     fn test_quantile_extremes() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let min_quantile = normal.quantile(0.0, 1000);
-        let max_quantile = normal.quantile(1.0, 1000);
+        let min_quantile = normal.quantile(0.0, 1000).unwrap();
+        let max_quantile = normal.quantile(1.0, 1000).unwrap();
 
         assert!(min_quantile < max_quantile);
         assert!(min_quantile < -2.0);
@@ -1387,8 +1581,8 @@ mod tests {
     #[test]
     fn test_cdf_extremes() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let prob_low = normal.cdf(-5.0, 1000);
-        let prob_high = normal.cdf(5.0, 1000);
+        let prob_low = normal.cdf(-5.0, 1000).unwrap();
+        let prob_high = normal.cdf(5.0, 1000).unwrap();
 
         assert!(prob_low < 0.1);
         assert!(prob_high > 0.9);
@@ -1398,8 +1592,8 @@ mod tests {
     #[test]
     fn test_confidence_interval_different_levels() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let (lower_90, upper_90) = normal.confidence_interval(0.90, 1000);
-        let (lower_99, upper_99) = normal.confidence_interval(0.99, 1000);
+        let (lower_90, upper_90) = normal.confidence_interval(0.90, 1000).unwrap();
+        let (lower_99, upper_99) = normal.confidence_interval(0.99, 1000).unwrap();
 
         assert!(lower_99 < lower_90);
         assert!(upper_99 > upper_90);
@@ -1409,7 +1603,7 @@ mod tests {
     #[test]
     fn test_entropy_deterministic() {
         let constant = Uncertain::new(|| "always");
-        let entropy = constant.entropy(1000);
+        let entropy = constant.entropy(1000).unwrap();
         assert!(entropy < 0.01);
     }
 
@@ -1422,7 +1616,7 @@ mod tests {
         probs.insert("d", 0.25);
 
         let uniform = Uncertain::categorical(&probs).unwrap();
-        let entropy = uniform.entropy(2000);
+        let entropy = uniform.entropy(2000).unwrap();
 
         assert!((entropy - 2.0).abs() < 0.2);
     }
@@ -1430,7 +1624,7 @@ mod tests {
     #[test]
     fn test_mode_tie_handling() {
         let balanced = Uncertain::new(|| if rand::random::<bool>() { 1 } else { 2 });
-        let mode = balanced.mode(1000);
+        let mode = balanced.mode(1000).unwrap();
         assert!(mode == Some(1) || mode == Some(2));
     }
 
@@ -1438,8 +1632,8 @@ mod tests {
     fn test_statistical_consistency() {
         let normal = Uncertain::normal(10.0, 2.0).unwrap();
 
-        let mean = normal.expected_value(2000);
-        let median = normal.quantile(0.5, 2000);
+        let mean = normal.expected_value(2000).unwrap();
+        let median = normal.quantile(0.5, 2000).unwrap();
         let mode_samples: Vec<f64> = (0..1000).map(|_| normal.sample()).collect();
         let empirical_mean = mode_samples.iter().sum::<f64>() / mode_samples.len() as f64;
 
@@ -1452,7 +1646,7 @@ mod tests {
     #[test]
     fn test_lazy_stats_basic() {
         let normal = Uncertain::normal(5.0, 2.0).unwrap();
-        let lazy_stats = normal.lazy_stats(1000);
+        let lazy_stats = normal.lazy_stats(1000).unwrap();
 
         let mean = lazy_stats.mean();
         assert!((mean - 5.0).abs() < 0.3);
@@ -1467,7 +1661,7 @@ mod tests {
     #[test]
     fn test_lazy_stats_sample_reuse() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let lazy_stats = normal.lazy_stats(100);
+        let lazy_stats = normal.lazy_stats(100).unwrap();
 
         // First call should generate samples
         let samples1 = lazy_stats.samples();
@@ -1521,7 +1715,7 @@ mod tests {
     #[test]
     fn test_compute_stats_batch() {
         let normal = Uncertain::normal(10.0, 2.0).unwrap();
-        let batch_stats = normal.compute_stats_batch(1000);
+        let batch_stats = normal.compute_stats_batch(1000).unwrap();
 
         assert!(batch_stats.count() == 1000);
         assert!((batch_stats.mean() - 10.0).abs() < 0.3);
@@ -1539,7 +1733,7 @@ mod tests {
             growth_factor: 1.5,
         };
 
-        let adaptive_stats = normal.adaptive_lazy_stats(&config);
+        let adaptive_stats = normal.adaptive_lazy_stats(&config).unwrap();
 
         let mean = adaptive_stats.mean();
         assert!((mean - 5.0).abs() < 0.3);
@@ -1561,17 +1755,17 @@ mod tests {
     #[test]
     fn test_lazy_stats_with_quantiles() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let lazy_stats = normal.lazy_stats(1000);
+        let lazy_stats = normal.lazy_stats(1000).unwrap();
 
-        let median = lazy_stats.quantile(0.5);
+        let median = lazy_stats.quantile(0.5).unwrap();
         assert!(median.abs() < 0.3); // Should be close to 0 for standard normal
 
-        let q25 = lazy_stats.quantile(0.25);
-        let q75 = lazy_stats.quantile(0.75);
+        let q25 = lazy_stats.quantile(0.25).unwrap();
+        let q75 = lazy_stats.quantile(0.75).unwrap();
         assert!(q25 < median);
         assert!(median < q75);
 
-        let (lower, upper) = lazy_stats.confidence_interval(0.95);
+        let (lower, upper) = lazy_stats.confidence_interval(0.95).unwrap();
         assert!(lower < upper);
         assert!(lower < median);
         assert!(median < upper);
@@ -1587,7 +1781,7 @@ mod tests {
     #[test]
     fn test_lazy_stats_debug_and_clone() {
         let normal = Uncertain::normal(1.0, 1.0).unwrap();
-        let lazy_stats = normal.lazy_stats(100);
+        let lazy_stats = normal.lazy_stats(100).unwrap();
 
         let debug_str = format!("{lazy_stats:?}");
         assert!(debug_str.contains("LazyStats"));
@@ -1609,7 +1803,7 @@ mod tests {
             growth_factor: 2.0,
         };
 
-        let adaptive_stats = constant.adaptive_lazy_stats(&config);
+        let adaptive_stats = constant.adaptive_lazy_stats(&config).unwrap();
         let mean = adaptive_stats.mean();
 
         assert!((mean - 42.0).abs() < 0.01);
@@ -1644,16 +1838,16 @@ mod tests {
 
         // With the new lazy evaluation design, each method call creates its own LazyStats,
         // so values won't be bitwise identical. However, they should be statistically close.
-        let mean1 = normal.expected_value(1000);
-        let mean2 = normal.expected_value(1000);
+        let mean1 = normal.expected_value(1000).unwrap();
+        let mean2 = normal.expected_value(1000).unwrap();
         assert!((mean1 - mean2).abs() < 0.2); // Allow for statistical variation
 
-        let var1 = normal.variance(1000);
-        let var2 = normal.variance(1000);
+        let var1 = normal.variance(1000).unwrap();
+        let var2 = normal.variance(1000).unwrap();
         assert!((var1 - var2).abs() < 0.2); // Allow for statistical variation
 
         // However, within a single LazyStats object, caching still works:
-        let stats = normal.lazy_stats(1000);
+        let stats = normal.lazy_stats(1000).unwrap();
         let cached_mean1 = stats.mean();
         let cached_mean2 = stats.mean();
         assert!((cached_mean1 - cached_mean2).abs() < f64::EPSILON);
@@ -1666,8 +1860,8 @@ mod tests {
     #[test]
     fn test_large_sample_counts() {
         let normal = Uncertain::normal(0.0, 1.0).unwrap();
-        let mean = normal.expected_value(10000);
-        let std_dev = normal.standard_deviation(10000);
+        let mean = normal.expected_value(10000).unwrap();
+        let std_dev = normal.standard_deviation(10000).unwrap();
 
         assert!((mean - 0.0).abs() < 0.1);
         assert!((std_dev - 1.0).abs() < 0.1);
@@ -1681,7 +1875,7 @@ mod tests {
             _ => 'C',
         });
 
-        let histogram = chars.histogram(300);
+        let histogram = chars.histogram(300).unwrap();
         assert_eq!(histogram.len(), 3);
         assert!(histogram.contains_key(&'A'));
         assert!(histogram.contains_key(&'B'));
@@ -1706,103 +1900,116 @@ mod tests {
     #[test]
     fn test_lazy_stats_quantile_interpolation_exact() {
         let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-        let stats = seq.lazy_stats(5);
+        let stats = seq.lazy_stats(5).unwrap();
         // position = 0.3 * 4 = 1.2 -> lower=1 (20.0), upper=2 (30.0), weight=0.2
         // 20.0 + 0.2 * (30.0 - 20.0) = 22.0
-        assert!((stats.quantile(0.3) - 22.0).abs() < 1e-9);
+        assert!((stats.quantile(0.3).unwrap() - 22.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_lazy_stats_quantile_equal_branch_clamp() {
-        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-        let stats = seq.lazy_stats(5);
-        // q=1.5 (out of the documented [0,1] range, not yet validated -- see spec 18)
-        // gives an exact-integer position (6.0), landing in the equal-index branch,
-        // which must clamp to the last valid index rather than reading out of bounds.
-        assert!((stats.quantile(1.5) - 50.0).abs() < 1e-9);
+    fn test_lazy_stats_quantile_single_sample() {
+        let seq = deterministic_sequence(vec![42.0]);
+        let stats = seq.lazy_stats(1).unwrap();
+        assert!((stats.quantile(0.5).unwrap() - 42.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_lazy_stats_quantile_interp_branch_clamp() {
+    fn test_lazy_stats_quantile_exact_integer_position() {
+        // q=0.0 and q=1.0 are valid boundary values that give an exact-integer
+        // position (0 and len-1 respectively), landing in the equal-index branch.
         let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-        let stats = seq.lazy_stats(5);
-        // q=1.125 gives position=4.5: lower_idx=4 (in bounds), upper_idx=5 (must
-        // clamp to 4, the last valid index) in the interpolation branch.
-        assert!((stats.quantile(1.125) - 50.0).abs() < 1e-9);
+        let stats = seq.lazy_stats(5).unwrap();
+        assert!((stats.quantile(0.0).unwrap() - 10.0).abs() < 1e-9);
+        assert!((stats.quantile(1.0).unwrap() - 50.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_lazy_stats_quantile_out_of_range_is_err() {
+        // Spec 18: q outside [0, 1] is now rejected before it can reach the
+        // position/index-clamp arithmetic at all (previously q=1.5/1.125 silently
+        // clamped to the last valid index instead of erroring).
+        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
+        let stats = seq.lazy_stats(5).unwrap();
+        assert!(matches!(
+            stats.quantile(1.5).unwrap_err(),
+            UncertainError::InvalidQuantile { .. }
+        ));
+        assert!(matches!(
+            stats.quantile(1.125).unwrap_err(),
+            UncertainError::InvalidQuantile { .. }
+        ));
     }
 
     #[test]
     fn test_lazy_stats_confidence_interval_exact() {
         let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
-        let stats = seq.lazy_stats(10);
-        let (lower, upper) = stats.confidence_interval(0.8);
+        let stats = seq.lazy_stats(10).unwrap();
+        let (lower, upper) = stats.confidence_interval(0.8).unwrap();
         assert!((lower - 1.0).abs() < 1e-9);
         assert!((upper - 9.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_lazy_stats_confidence_interval_lower_clamp() {
+    fn test_lazy_stats_confidence_interval_out_of_range_is_err() {
+        // Spec 18: confidence outside (0, 1) is now rejected before it can reach the
+        // index-clamp arithmetic (previously confidence=-1.0/3.0 silently drove the
+        // raw index past the array bound and relied on a clamp instead of erroring).
         let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
-        let stats = seq.lazy_stats(10);
-        // confidence=-1.0 is out of the documented (0,1) range (not yet validated --
-        // see spec 18), but it drives lower_idx's raw (pre-clamp) value past the
-        // array bound, exercising the lower-index clamp specifically.
-        let (lower, upper) = stats.confidence_interval(-1.0);
-        assert!((lower - 10.0).abs() < 1e-9);
-        assert!((upper - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_lazy_stats_confidence_interval_upper_clamp() {
-        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
-        let stats = seq.lazy_stats(10);
-        // confidence=3.0 drives upper_idx's raw (pre-clamp) value past the array
-        // bound, exercising the upper-index clamp specifically.
-        let (lower, upper) = stats.confidence_interval(3.0);
-        assert!((lower - 1.0).abs() < 1e-9);
-        assert!((upper - 10.0).abs() < 1e-9);
+        let stats = seq.lazy_stats(10).unwrap();
+        assert!(matches!(
+            stats.confidence_interval(-1.0).unwrap_err(),
+            UncertainError::InvalidConfidence { .. }
+        ));
+        assert!(matches!(
+            stats.confidence_interval(3.0).unwrap_err(),
+            UncertainError::InvalidConfidence { .. }
+        ));
     }
 
     #[test]
     fn test_uncertain_confidence_interval_exact() {
         let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
-        let (lower, upper) = seq.confidence_interval(0.8, 10);
+        let (lower, upper) = seq.confidence_interval(0.8, 10).unwrap();
         assert!((lower - 1.0).abs() < 1e-9);
         assert!((upper - 9.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_uncertain_confidence_interval_lower_clamp() {
+    fn test_uncertain_confidence_interval_out_of_range_is_err() {
         let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
-        let (lower, upper) = seq.confidence_interval(-1.0, 10);
-        assert!((lower - 10.0).abs() < 1e-9);
-        assert!((upper - 1.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn test_uncertain_confidence_interval_upper_clamp() {
-        let seq = deterministic_sequence((1..=10).map(f64::from).collect::<Vec<_>>());
-        let (lower, upper) = seq.confidence_interval(3.0, 10);
-        assert!((lower - 1.0).abs() < 1e-9);
-        assert!((upper - 10.0).abs() < 1e-9);
+        assert!(matches!(
+            seq.confidence_interval(-1.0, 10).unwrap_err(),
+            UncertainError::InvalidConfidence { .. }
+        ));
+        assert!(matches!(
+            seq.confidence_interval(3.0, 10).unwrap_err(),
+            UncertainError::InvalidConfidence { .. }
+        ));
     }
 
     #[test]
     fn test_uncertain_quantile_interpolation_exact() {
         let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-        assert!((seq.quantile(0.3, 5) - 22.0).abs() < 1e-9);
+        assert!((seq.quantile(0.3, 5).unwrap() - 22.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_uncertain_quantile_equal_branch_clamp() {
-        let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-        assert!((seq.quantile(1.5, 5) - 50.0).abs() < 1e-9);
+    fn test_uncertain_quantile_single_sample() {
+        let seq = deterministic_sequence(vec![42.0]);
+        assert!((seq.quantile(0.5, 1).unwrap() - 42.0).abs() < 1e-9);
     }
 
     #[test]
-    fn test_uncertain_quantile_interp_branch_clamp() {
+    fn test_uncertain_quantile_out_of_range_is_err() {
         let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 40.0, 50.0]);
-        assert!((seq.quantile(1.125, 5) - 50.0).abs() < 1e-9);
+        assert!(matches!(
+            seq.quantile(1.5, 5).unwrap_err(),
+            UncertainError::InvalidQuantile { .. }
+        ));
+        assert!(matches!(
+            seq.quantile(1.125, 5).unwrap_err(),
+            UncertainError::InvalidQuantile { .. }
+        ));
     }
 
     #[test]
@@ -1818,7 +2025,7 @@ mod tests {
             error_threshold: 0.0001,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&seq, &config);
+        let stats = AdaptiveLazyStats::new(&seq, &config).unwrap();
 
         stats.ensure_samples(3);
         assert_eq!(stats.progressive_stats.borrow().count(), 3);
@@ -1856,7 +2063,7 @@ mod tests {
             error_threshold: 2.0,
             growth_factor: 1.5,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let mean = stats.mean();
         assert!((mean - 5.0).abs() < 1e-9);
         // Correct: iteration 1 (target 10) skips the premature check; iteration 2
@@ -1880,7 +2087,7 @@ mod tests {
             error_threshold: 0.01,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let mean = stats.mean();
         assert!(mean.abs() < 1e-9);
         assert_eq!(*stats.current_samples.borrow(), 10);
@@ -1895,7 +2102,7 @@ mod tests {
             error_threshold: 2.0,
             growth_factor: 1.5,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let variance = stats.variance();
         assert!(variance.abs() < 1e-9); // constant source -> variance 0
         assert_eq!(*stats.current_samples.borrow(), 15);
@@ -1910,7 +2117,7 @@ mod tests {
             error_threshold: 0.01,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let variance = stats.variance();
         assert!(variance.abs() < 1e-9);
         assert_eq!(*stats.current_samples.borrow(), 10);
@@ -1930,7 +2137,7 @@ mod tests {
             error_threshold: 2.0,
             growth_factor: 1.5,
         };
-        let mean = source.expected_value_adaptive(&config);
+        let mean = source.expected_value_adaptive(&config).unwrap();
         assert!((mean - 5.0).abs() < 1e-9);
         // Correct: skips the premature check at iteration 1 (10 samples), converges
         // at iteration 2 (15 more samples, 25 total). A `>` -> `>=` mutation on the
@@ -1949,7 +2156,7 @@ mod tests {
         let mut values = vec![7; 50];
         values.extend(0..30); // 30 distinct singleton values: 0..29
         let seq = deterministic_sequence(values.clone());
-        let mode = seq.mode(values.len());
+        let mode = seq.mode(values.len()).unwrap();
         assert_eq!(mode, Some(7));
     }
 
@@ -1959,8 +2166,8 @@ mod tests {
         // mean=2.8, population variance=12.96, std=3.6
         // skewness = sum(((x-mean)/std)^3)/n = 1.5
         // excess kurtosis = sum(((x-mean)/std)^4)/n - 3.0 = 0.25
-        assert!((seq.skewness(5) - 1.5).abs() < 1e-9);
-        assert!((seq.kurtosis(5) - 0.25).abs() < 1e-9);
+        assert!((seq.skewness(5).unwrap() - 1.5).abs() < 1e-9);
+        assert!((seq.kurtosis(5).unwrap() - 0.25).abs() < 1e-9);
     }
 
     #[test]
@@ -1971,7 +2178,7 @@ mod tests {
         let seq = deterministic_sequence(vec![10.0, 20.0, 30.0, 100.0]);
         // quantile(0.5, 4): position=0.5*3=1.5 -> lower=20.0, upper=30.0, weight=0.5
         // -> median = 25.0. deviations sorted = [5,5,15,75]; mad_index=(4-1)/2=1 -> 5.0
-        assert!((seq.median_absolute_deviation(4) - 5.0).abs() < 1e-9);
+        assert!((seq.median_absolute_deviation(4).unwrap() - 5.0).abs() < 1e-9);
     }
 
     #[test]
@@ -1983,9 +2190,9 @@ mod tests {
         // matters too: multiplying vs dividing by exactly 1.0 in the denominator
         // gives the same result, masking a `sample_count * bandwidth` -> `/` mutant.
         let seq = deterministic_sequence(vec![0.0, 1.0, 2.0, -1.5]);
-        let pdf = seq.pdf_kde(0.5, 4, 2.0);
+        let pdf = seq.pdf_kde(0.5, 4, 2.0).unwrap();
         assert!((pdf - 0.164_555_548_784_955_8).abs() < 1e-9);
-        let ll = seq.log_likelihood(0.5, 4, 2.0);
+        let ll = seq.log_likelihood(0.5, 4, 2.0).unwrap();
         assert!((ll - (-1.804_507_083_195_324)).abs() < 1e-6);
     }
 
@@ -1993,7 +2200,7 @@ mod tests {
     fn test_correlation_exact() {
         let x = deterministic_sequence(vec![1.0, 3.0, 2.0, 8.0, 5.0]);
         let y = deterministic_sequence(vec![2.0, 1.0, 9.0, 4.0, 3.0]);
-        let correlation = x.correlation(&y, 5);
+        let correlation = x.correlation(&y, 5).unwrap();
         assert!((correlation - (-0.063_640_188_856_59)).abs() < 1e-9);
     }
 
@@ -2016,7 +2223,7 @@ mod tests {
         // `y - mean_y` term is 0.0) by `sqrt(0.0)`, producing `NaN`.
         let x = Uncertain::normal(0.0, 1.0).unwrap();
         let y = Uncertain::new(|| 7.0);
-        let correlation = x.correlation(&y, 1000);
+        let correlation = x.correlation(&y, 1000).unwrap();
         assert!(correlation.abs() < f64::EPSILON);
     }
 
@@ -2036,7 +2243,7 @@ mod tests {
             error_threshold: 0.6,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let mean = stats.mean();
         // Real: converges once sample_count reaches 8 (relative_error 0.5714 < 0.6);
         // mean over the cumulative [0..7] range is (0+7)/2 = 3.5.
@@ -2061,7 +2268,7 @@ mod tests {
             error_threshold: 2.0 / 3.5,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let mean = stats.mean();
         assert!((mean - 7.5).abs() < 1e-9); // mean over cumulative [0..15]
         assert_eq!(*stats.current_samples.borrow(), 16);
@@ -2084,7 +2291,7 @@ mod tests {
             error_threshold: 0.73,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let variance = stats.variance();
         // ProgressiveStats::variance over [0..7] (n=8): mean=3.5, sum_squares=140,
         // (140 - 8*3.5^2)/(8-1) = 6.0.
@@ -2112,7 +2319,7 @@ mod tests {
             error_threshold: (v8 - v4) / v8,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let variance = stats.variance();
         assert!((variance - 346.666_666_666_666_7).abs() < 1e-6);
         assert_eq!(*stats.current_samples.borrow(), 64);
@@ -2138,7 +2345,7 @@ mod tests {
             error_threshold: 0.65,
             growth_factor: 2.0,
         };
-        let stats = AdaptiveLazyStats::new(&source, &config);
+        let stats = AdaptiveLazyStats::new(&source, &config).unwrap();
         let variance = stats.variance();
         // Real: never converges via the primary check, runs to max_samples=64.
         // ProgressiveStats::variance over [0..63]: computed via the same formula.
@@ -2162,7 +2369,7 @@ mod tests {
             error_threshold: 0.75,
             growth_factor: 2.0,
         };
-        let mean = source.expected_value_adaptive(&config);
+        let mean = source.expected_value_adaptive(&config).unwrap();
         // Real: relative_error at n=8 is 0.8 (not < 0.75), continues to n=16 where
         // relative_error is 0.6154 (< 0.75) -> converges with mean = 19.5 (fresh draw
         // of positions 12..27... i.e. the third batch; see fork report for the exact
@@ -2187,7 +2394,7 @@ mod tests {
             error_threshold: 0.8,
             growth_factor: 2.0,
         };
-        let mean = source.expected_value_adaptive(&config);
+        let mean = source.expected_value_adaptive(&config).unwrap();
         assert!((mean - 19.5).abs() < 1e-9);
     }
 }

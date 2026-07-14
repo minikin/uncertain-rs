@@ -1,6 +1,6 @@
 # Spec 18 — Statistics Entry-Point Validation
 
-**Status:** Pending | **Effort:** High | **Module:** `src/statistics.rs`
+**Status:** Implemented | **Effort:** High | **Module:** `src/statistics.rs`
 
 ## Context
 
@@ -63,3 +63,70 @@ Two nearly-identical method pairs exist and both need this: `LazyStats::quantile
 - **Given** `just dev`, **when** run, **then** it's green across default and `parallel`
   features, including every test/example/bench call site updated for the new `Result`
   signatures.
+
+## Implementation notes (deviations and interpretation calls)
+
+- **Validation helpers.** Four private free functions in `src/statistics.rs` —
+  `validate_sample_count`, `validate_quantile`, `validate_confidence`,
+  `validate_bandwidth` — each called at the top of the relevant method, before any
+  sampling/cache work. This keeps the actual computation and its cache interaction
+  (`cache::stats_cache().get_or_compute_*`, whose closures are unchanged) exactly as
+  before for valid inputs, satisfying invariant 8: invalid inputs short-circuit before
+  reaching the closure at all, so the `Ok(...)` path is bit-identical to the pre-spec
+  return value.
+- **Construction-time vs. call-time validation (invariant 5).** `LazyStats::new` and
+  `AdaptiveLazyStats::new` validate once, at construction:
+  - `LazyStats::new(uncertain, sample_count)` now returns `Result<Self, UncertainError>`,
+    validating `sample_count > 0` once. Its own `mean`/`variance`/`std_dev`/`samples`
+    accessors stay infallible (`-> f64`/`-> Vec<T>`) — they read the already-validated
+    stored `sample_count`, so a per-call re-check would be redundant. `quantile`/
+    `confidence_interval` still validate per call (invariants 1–2 apply to *both*
+    `LazyStats` and `Uncertain` variants), since `q`/`confidence` are call-time
+    parameters, not part of the stored state.
+  - `AdaptiveLazyStats::new(uncertain, config)` validates `config.min_samples > 0` once.
+    This isn't a literal `sample_count: usize` parameter (it's a field on the
+    `AdaptiveSampling` config struct), but `min_samples` plays exactly that role for the
+    adaptive convergence loop — with `min_samples == 0`, the loop's exponential growth
+    (`sample_count * growth_factor`) never advances past zero and convergence never
+    terminates. `Uncertain::adaptive_lazy_stats`/`expected_value_adaptive` propagate this
+    via `?` (the latter needs no explicit check of its own: its first loop iteration
+    calls `self.expected_value(config.min_samples)`, which already validates and errors).
+  - Every other listed method (`mode`, `histogram`, `entropy`, `expected_value`,
+    `variance`, `standard_deviation`, `skewness`, `kurtosis`, `confidence_interval`,
+    `cdf`, `quantile`, `interquartile_range`, `median_absolute_deviation`, `pdf_kde`,
+    `log_likelihood`, `correlation`, `compute_stats_batch`, `lazy_stats`/`stats`) takes
+    `sample_count` as a genuine per-call parameter (no stored state to validate once
+    instead), so each validates at call time. Several (`standard_deviation`,
+    `interquartile_range`, `median_absolute_deviation`, `log_likelihood`, `entropy`)
+    validate only by propagating `?` from a method they delegate to
+    (`variance`/`quantile`/`quantile`/`pdf_kde`/`histogram` respectively), per invariant
+    4's parenthetical allowance.
+- **Dead-code cleanup enabled by validation.** Once `sample_count > 0` is guaranteed at
+  entry, `Uncertain::take_samples(sample_count)` (an infinite iterator `.take(count)`)
+  can never return an empty `Vec`. This made the pre-existing `samples.is_empty()` guard
+  in both `LazyStats::quantile` and `Uncertain::quantile` truly unreachable (previously
+  it was reachable only via the since-removed silent-clamp path for invalid inputs), so
+  both were deleted rather than left as untestable dead branches — the same pattern as
+  the `GraphProfiler::get_stats` cleanup in Spec 06.
+- **Tests whose premise the validation invalidates.** Several existing tests
+  (`test_mode_empty_samples`, `test_histogram_empty`, and six `..._clamp` tests for
+  `quantile`/`confidence_interval` on both `LazyStats` and `Uncertain`) were written
+  *for* the old silent/clamping behavior on invalid inputs (`sample_count = 0`,
+  `q`/`confidence` outside their valid range) — several carried an explicit comment
+  flagging them as "not yet validated -- see spec 18". These are replaced with tests
+  asserting the specific `Err` variant instead of the old clamped/empty value.
+- **CRAP regression, accepted and rebaselined.** Every touched method's CRAP score rose
+  (CC +1 to +2, from the added validation branch/branches), the same pattern as Spec 06.
+  All reached 100% line coverage in this change (including two new tests for the
+  previously-untested `validate_bandwidth`/`validate_quantile` error paths and two for
+  the single-sample/exact-integer-position branches the dead-code cleanup above exposed
+  as needing direct coverage), so the increase is purely complexity, not a coverage gap.
+  `crap_baseline.json` regenerated via `just crap-update-baseline`.
+- **Benchmarks.** Not a stated invariant for this spec (unlike Spec 05/06), but checked
+  anyway: `statistical_operations`/`interval_operations`/`pdf_operations` criterion
+  groups show no consistent regression — a couple of the tiniest cached-path
+  benchmarks (~30-40ns baseline) flip between "regressed" and "improved" by double-digit
+  percentages across consecutive reruns, i.e. pure measurement noise on a duration where
+  a couple of nanoseconds of branch overhead is a large relative percentage; the
+  "first_run" (uncached, real sampling) benchmarks — the ones that reflect actual
+  workload cost — show no regression.

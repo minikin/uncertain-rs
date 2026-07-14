@@ -26,7 +26,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 | 15 | [Docs & meta cleanup](15-docs-and-meta.md) | P1 | Low | no | Pending |
 | 16 | [Release automation](16-release-automation.md) | P2 | Low | no | Pending |
 | 17 | [Clippy pedantic/nursery cleanup](17-clippy-pedantic-cleanup.md) | P2 | Medium | no | Pending |
-| 18 | [Statistics entry-point validation](18-statistics-validation.md) | P0 | High | **yes** | Pending |
+| 18 | [Statistics entry-point validation](18-statistics-validation.md) | P0 | High | **yes** | Implemented |
 | 19 | [Deflake existing test suite](19-deflake-existing-tests.md) | P1 | High | no | Pending |
 
 ## Suggested order
@@ -44,9 +44,12 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
    large mechanical effort of its own kind, distinct from building the seeding
    infrastructure.)*
 3. **02, 03, 06, 18** — the breaking API changes, batched into one 0.3.0 release.
-   *(02 implemented; its statistics-entry-point-validation half was split out to 18 —
-   see 02's spec for why: a comparably large, independently-shippable ripple through a
-   different module.)*
+   *(02, 03, 18 implemented. 02's statistics-entry-point-validation half was split out to
+   18 — see 02's spec for why: a comparably large, independently-shippable ripple through
+   a different module. 18 validates at construction time for `LazyStats`/
+   `AdaptiveLazyStats` (sample count fixed once, reused by every accessor) and at call
+   time everywhere else (sample count/quantile/confidence/bandwidth are genuine per-call
+   parameters) — see 18's spec for the full per-method breakdown.)*
 4. **07 → 08** — optimizer correctness before optimizer effectiveness.
 5. **09, 10, 11, 14, 15, 17, 19** in any order.
 6. **12, 13, 16** — feature/polish tail.
