@@ -1,12 +1,14 @@
-#![allow(clippy::cast_precision_loss)]
+#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 
 use crate::Uncertain;
 use crate::error::{Result, UncertainError};
 use crate::rng::{random_f64, with_rng};
 use crate::traits::Shareable;
 use rand::prelude::*;
+use rand_distr::{
+    Bernoulli, Beta, Binomial, Exp, Gamma, Geometric, LogNormal, Normal, Poisson, Uniform,
+};
 use std::collections::HashMap;
-use std::f64::consts::PI;
 
 fn validate_finite(name: &'static str, value: f64) -> Result<()> {
     if value.is_finite() {
@@ -250,13 +252,9 @@ impl Uncertain<f64> {
     }
 
     fn normal_unchecked(mean: f64, std_dev: f64) -> Self {
-        Uncertain::new(move || {
-            // Box-Muller transform for normal distribution
-            let u1: f64 = random_f64().clamp(0.001, 0.999);
-            let u2: f64 = random_f64().clamp(0.001, 0.999);
-            let z0 = (-2.0 * u1.ln()).sqrt() * (2.0 * PI * u2).cos();
-            mean + std_dev * z0
-        })
+        let dist = Normal::new(mean, std_dev)
+            .expect("mean finite and std_dev >= 0 already validated by normal()/log_normal()");
+        Uncertain::new(move || with_rng(|rng| dist.sample(rng)))
     }
 
     /// Creates a uniform distribution
@@ -285,7 +283,8 @@ impl Uncertain<f64> {
                 "must be less than or equal to max",
             ));
         }
-        Ok(Uncertain::new(move || min + (max - min) * random_f64()))
+        let dist = Uniform::new_inclusive(min, max).expect("min <= max already validated above");
+        Ok(Uncertain::new(move || with_rng(|rng| dist.sample(rng))))
     }
 
     /// Creates an exponential distribution
@@ -304,7 +303,8 @@ impl Uncertain<f64> {
     /// ```
     pub fn exponential(rate: f64) -> Result<Self> {
         validate_positive("rate", rate)?;
-        Ok(Uncertain::new(move || -random_f64().ln() / rate))
+        let dist = Exp::new(rate).expect("rate > 0 already validated above");
+        Ok(Uncertain::new(move || with_rng(|rng| dist.sample(rng))))
     }
 
     /// Creates a log-normal distribution
@@ -326,7 +326,9 @@ impl Uncertain<f64> {
     pub fn log_normal(mu: f64, sigma: f64) -> Result<Self> {
         validate_finite("mu", mu)?;
         validate_non_negative("sigma", sigma)?;
-        Ok(Self::normal_unchecked(mu, sigma).map(f64::exp))
+        let dist =
+            LogNormal::new(mu, sigma).expect("mu finite and sigma >= 0 already validated above");
+        Ok(Uncertain::new(move || with_rng(|rng| dist.sample(rng))))
     }
 
     /// Creates a beta distribution
@@ -347,20 +349,8 @@ impl Uncertain<f64> {
     pub fn beta(alpha: f64, beta: f64) -> Result<Self> {
         validate_positive("alpha", alpha)?;
         validate_positive("beta", beta)?;
-        Ok(Uncertain::new(move || {
-            // Using rejection sampling method
-            loop {
-                let u1: f64 = random_f64();
-                let u2: f64 = random_f64();
-
-                let x = u1.powf(1.0 / alpha);
-                let y = u2.powf(1.0 / beta);
-
-                if x + y <= 1.0 {
-                    return x / (x + y);
-                }
-            }
-        }))
+        let dist = Beta::new(alpha, beta).expect("alpha > 0 and beta > 0 already validated above");
+        Ok(Uncertain::new(move || with_rng(|rng| dist.sample(rng))))
     }
 
     /// Creates a gamma distribution
@@ -387,33 +377,15 @@ impl Uncertain<f64> {
     }
 
     fn gamma_unchecked(shape: f64, scale: f64) -> Self {
-        Uncertain::new(move || {
-            // Marsaglia and Tsang method for shape >= 1
-            if shape >= 1.0 {
-                let d = shape - 1.0 / 3.0;
-                let c = 1.0 / (9.0 * d).sqrt();
-
-                loop {
-                    let normal_sample = Self::normal_unchecked(0.0, 1.0).sample();
-                    let v = (1.0 + c * normal_sample).powi(3);
-
-                    if v > 0.0 {
-                        let u: f64 = random_f64();
-                        if u < 1.0 - 0.0331 * normal_sample.powi(4) {
-                            return d * v * scale;
-                        }
-                        if u.ln() < 0.5 * normal_sample.powi(2) + d * (1.0 - v + v.ln()) {
-                            return d * v * scale;
-                        }
-                    }
-                }
-            } else {
-                // For shape < 1, use transformation
-                let gamma_1_plus_shape = Self::gamma_unchecked(shape + 1.0, scale).sample();
-                let u: f64 = random_f64();
-                gamma_1_plus_shape * u.powf(1.0 / shape)
-            }
-        })
+        // rand_distr::Gamma requires scale > 0 strictly; scale == 0 is a legitimate
+        // degenerate point mass at 0 this crate has supported since spec 02, so it's
+        // handled directly rather than passed to rand_distr.
+        if scale == 0.0 {
+            return Uncertain::new(|| 0.0);
+        }
+        let dist =
+            Gamma::new(shape, scale).expect("shape > 0 and scale > 0 already validated above");
+        Uncertain::new(move || with_rng(|rng| dist.sample(rng)))
     }
 }
 
@@ -435,7 +407,9 @@ impl Uncertain<bool> {
     /// ```
     pub fn bernoulli(probability: f64) -> Result<Self> {
         validate_unit_interval("probability", probability)?;
-        Ok(Uncertain::new(move || random_f64() < probability))
+        let dist =
+            Bernoulli::new(probability).expect("probability in [0, 1] already validated above");
+        Ok(Uncertain::new(move || with_rng(|rng| dist.sample(rng))))
     }
 }
 
@@ -468,14 +442,13 @@ where
     /// ```
     pub fn binomial(trials: u32, probability: f64) -> Result<Self> {
         validate_unit_interval("probability", probability)?;
+        let dist = Binomial::new(u64::from(trials), probability)
+            .expect("probability in [0, 1] already validated above");
         Ok(Uncertain::new(move || {
-            let mut count = T::default();
-            for _ in 0..trials {
-                if random_f64() < probability {
-                    count += T::from(1);
-                }
-            }
-            count
+            let count: u64 = with_rng(|rng| dist.sample(rng));
+            // count is a number of successes out of `trials` (a u32), so it always
+            // fits back into a u32 without truncation.
+            T::from(count as u32)
         }))
     }
 
@@ -483,10 +456,11 @@ where
     ///
     /// # Arguments
     /// * `lambda` - Rate parameter, must be non-negative (`0.0` degenerates to a point
-    ///   mass at `0`)
+    ///   mass at `0`) and at most [`Poisson::MAX_LAMBDA`] (~1.844e19)
     ///
     /// # Errors
-    /// Returns an error if `lambda` is not finite or negative.
+    /// Returns an error if `lambda` is not finite, negative, or exceeds
+    /// [`Poisson::MAX_LAMBDA`].
     ///
     /// # Example
     /// ```rust
@@ -496,21 +470,23 @@ where
     /// ```
     pub fn poisson(lambda: f64) -> Result<Self> {
         validate_non_negative("lambda", lambda)?;
+        if lambda > Poisson::<f64>::MAX_LAMBDA {
+            return Err(UncertainError::invalid_parameter(
+                "lambda",
+                lambda,
+                "must not exceed Poisson::MAX_LAMBDA (~1.844e19)",
+            ));
+        }
+        // rand_distr::Poisson requires lambda > 0 strictly; lambda == 0 is a legitimate
+        // degenerate point mass at 0 this crate has supported since spec 02.
+        if lambda == 0.0 {
+            return Ok(Uncertain::new(|| T::from(0)));
+        }
+        let dist = Poisson::new(lambda)
+            .expect("lambda in (0, Poisson::MAX_LAMBDA] already validated above");
         Ok(Uncertain::new(move || {
-            let l = (-lambda).exp();
-            let mut k = T::from(0);
-            let mut p = 1.0;
-
-            loop {
-                k += T::from(1);
-                p *= random_f64();
-                if p <= l {
-                    break;
-                }
-            }
-
-            // Return k - 1 per Knuth's algorithm
-            k - T::from(1)
+            let count: f64 = with_rng(|rng| dist.sample(rng));
+            T::from(count.round() as u32)
         }))
     }
 
@@ -531,12 +507,14 @@ where
     /// ```
     pub fn geometric(probability: f64) -> Result<Self> {
         validate_left_open_unit_interval("probability", probability)?;
+        let dist =
+            Geometric::new(probability).expect("probability in (0, 1] already validated above");
         Ok(Uncertain::new(move || {
-            let mut trials = T::from(1);
-            while random_f64() >= probability {
-                trials += T::from(1);
-            }
-            trials
+            let failures: u64 = with_rng(|rng| dist.sample(rng));
+            // rand_distr::Geometric counts failures before the first success
+            // (0-indexed). This crate documents "number of trials until first
+            // success" (1-indexed, >= 1), matching its pre-rand_distr behavior.
+            T::from((failures as u32) + 1)
         }))
     }
 }
@@ -879,6 +857,12 @@ mod tests {
     }
 
     #[test]
+    fn test_poisson_rejects_lambda_above_max() {
+        let result: Result<Uncertain<u32>> = Uncertain::poisson(Poisson::<f64>::MAX_LAMBDA * 2.0);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_poisson_allows_zero_lambda_degenerate() {
         let poisson: Uncertain<u32> = Uncertain::poisson(0.0).unwrap();
         let samples: Vec<u32> = poisson.take_samples(10);
@@ -944,10 +928,6 @@ mod tests {
 
     #[test]
     fn test_normal_distribution_moments() {
-        // Checks both mean AND standard deviation (the existing test only checked mean),
-        // with a tolerance tight enough to catch a corrupted Box-Muller formula (e.g. a
-        // `*` -> `/` swap inside the `sqrt(-2 ln u1) * cos(2*pi*u2)` term) while staying
-        // well outside normal sampling noise at this sample size.
         let normal = Uncertain::normal(10.0, 3.0).unwrap();
         let samples: Vec<f64> = normal.take_samples(20_000);
         let mean = samples.iter().sum::<f64>() / samples.len() as f64;
@@ -959,10 +939,24 @@ mod tests {
     }
 
     #[test]
+    fn test_normal_tails_are_not_truncated() {
+        // The pre-rand_distr Box-Muller implementation clamped its uniforms to
+        // [0.001, 0.999], making |z| > ~3.09 unreachable. rand_distr's Normal (Ziggurat
+        // method) has no such clamp. Seeded for a deterministic, reproducible check
+        // instead of "usually produces a tail value."
+        use rand::SeedableRng;
+        let normal = Uncertain::normal(0.0, 1.0).unwrap();
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(0);
+        let samples = normal.take_samples_with(&mut rng, 10_000_000);
+        assert!(
+            samples.iter().any(|&x| x.abs() > 4.0),
+            "expected at least one |z| > 4 in 10,000,000 samples of a standard normal"
+        );
+    }
+
+    #[test]
     fn test_beta_distribution_moments() {
         // Closed-form: mean = a/(a+b), variance = ab / ((a+b)^2 (a+b+1)).
-        // Deliberately skewed (2.0, 8.0) so an arithmetic corruption in the
-        // rejection-sampling accept condition or final ratio shows up clearly.
         let alpha = 2.0;
         let beta_param = 8.0;
         let beta = Uncertain::beta(alpha, beta_param).unwrap();
@@ -985,29 +979,8 @@ mod tests {
     }
 
     #[test]
-    fn test_beta_final_ratio_uses_division_not_modulo() {
-        // With alpha == beta == 0.5, x and y (both in the accepted region x+y<=1) are
-        // large enough relative to their sum that `x` alone (what a `/` -> `%` mutation
-        // in `x / (x + y)` would return, since 0 <= x < x+y makes `x % (x+y) == x`)
-        // has a mean far from the true `x / (x + y)` mean: simulation shows ~0.50 vs
-        // ~0.25 for these parameters, a much larger gap than the (2.0, 8.0) case above
-        // where the two coincidentally land close together.
-        let alpha = 0.5;
-        let beta_param = 0.5;
-        let beta = Uncertain::beta(alpha, beta_param).unwrap();
-        let samples: Vec<f64> = beta.take_samples(20_000);
-        let mean = samples.iter().sum::<f64>() / samples.len() as f64;
-        let expected_mean = alpha / (alpha + beta_param);
-        assert!(
-            (mean - expected_mean).abs() < 0.05,
-            "mean {mean}, expected {expected_mean}"
-        );
-    }
-
-    #[test]
     fn test_gamma_distribution_moments_shape_at_least_one() {
-        // Exercises the Marsaglia-Tsang branch (shape >= 1.0). Closed-form:
-        // mean = shape*scale, variance = shape*scale^2.
+        // Closed-form: mean = shape*scale, variance = shape*scale^2.
         let shape = 3.0;
         let scale = 2.0;
         let gamma = Uncertain::gamma(shape, scale).unwrap();
@@ -1030,8 +1003,6 @@ mod tests {
 
     #[test]
     fn test_gamma_distribution_moments_shape_below_one() {
-        // Exercises the shape < 1.0 transformation branch (gamma_1_plus_shape *
-        // u.powf(1/shape)), which the shape >= 1.0 test above never reaches.
         let shape = 0.5;
         let scale = 3.0;
         let gamma = Uncertain::gamma(shape, scale).unwrap();

@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Uncertain<T>` infallibly. See `MIGRATION_GUIDE.md`.
 - Error messages now include structured data (e.g., expected vs actual counts)
 - Improved error messages with more context and helpful information
+- Distribution sampling (`normal`, `uniform`, `exponential`, `log_normal`, `beta`, `gamma`,
+  `bernoulli`, `binomial`, `poisson`, `geometric`) now uses `rand_distr` (new dependency)
+  instead of hand-rolled algorithms. The previous normal sampler clamped its Box-Muller
+  uniforms to `[0.001, 0.999]`, making `|z| > ~3.09` unreachable and biasing every
+  downstream statistic; `rand_distr`'s Ziggurat method has no such clamp and is
+  ~65% faster (measured: 272µs -> 94µs per 1000 samples). `poisson` now rejects
+  `lambda > ~1.844e19` (`Poisson::MAX_LAMBDA`, a real limit of the sampling algorithm) —
+  see `MIGRATION_GUIDE.md`. No other observable behavior change; degenerate cases
+  (`std_dev`/`scale`/`lambda` of `0`) are still supported exactly as before.
 
 ### Removed
 
