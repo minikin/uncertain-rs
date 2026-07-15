@@ -34,6 +34,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `UncertainError::UnsupportedNode` - returned by `ComputationNode` evaluation methods
   when a graph node isn't evaluable in the requested domain (e.g. a boolean `BinaryOp`,
   for which no operation is defined).
+- `ComputationNode::constant` - creates a leaf whose value is structurally known to be
+  constant, for callers building computation graphs directly with the low-level API.
+  This is the only way to make a node eligible for the optimizer's identity
+  elimination/constant folding passes; `Uncertain::point` now uses it internally.
+
+### Fixed
+
+- `GraphOptimizer`'s constant-folding and identity-elimination passes (`x + 0`, `x * 1`,
+  `x * 0`, etc.) no longer decide whether a node is constant by sampling it 3-4 times and
+  comparing the results. That approach could silently miscompile a low-entropy
+  distribution into a constant purely by chance (e.g. `bernoulli(0.99)` had roughly a
+  96% chance of sampling the same value 4 times in a row) and fold it away, changing the
+  distribution the optimized graph represents. Constancy is now decided structurally: a
+  node is constant only if it was built via the new `ComputationNode::constant`
+  (transitively, `Uncertain::point`) or is itself a folded result of already-constant
+  operands — never by observing sampled behavior.
 
 ### Changed
 

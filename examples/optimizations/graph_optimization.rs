@@ -36,8 +36,8 @@ fn main() {
     let x_node = ComputationNode::leaf(|| 2.0);
     let y_node = ComputationNode::leaf(|| 3.0);
     let z_node = ComputationNode::leaf(|| 1.0);
-    let zero_node = ComputationNode::leaf(|| 0.0);
-    let one_node = ComputationNode::leaf(|| 1.0);
+    let zero_node = ComputationNode::constant(0.0);
+    let one_node = ComputationNode::constant(1.0);
 
     let sum_node = ComputationNode::binary_op(x_node.clone(), y_node.clone(), BinaryOperation::Add);
 

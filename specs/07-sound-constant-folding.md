@@ -1,6 +1,6 @@
 # Spec 07 — Sound Constant Folding
 
-**Status:** Pending | **Effort:** Medium | **Module:** `src/computation.rs` (GraphOptimizer)
+**Status:** Implemented | **Effort:** Medium | **Module:** `src/computation.rs` (GraphOptimizer)
 
 ## Context
 
@@ -40,3 +40,54 @@ user's model. An optimizer must never alter distributional semantics.
   unoptimized with the same seed (Spec 04), **then** sampled outputs are identical.
 - **Given** the source of `GraphOptimizer`, **when** grepped, **then** no `sample()` call
   participates in any `is_constant*` decision.
+
+## Implementation notes
+
+- **`constant_value: Option<T>`, not just a bool.** `ComputationNode::Leaf` gained a
+  `constant_value: Option<T>` field (not merely an `is_constant: bool`) precisely so the
+  last acceptance test holds *literally*: `is_constant_zero`/`is_constant_one`/the
+  constant-folding match arms compare `constant_value` directly and never call `sample`
+  at all — not even once after confirming constancy. A bool-flag version was tried first
+  and still called `sample()` once to read the value for the zero/one comparison; storing
+  the value directly removes that call entirely, at the cost of one extra (small,
+  `Option<T>`) field per leaf.
+- **The only way to get `constant_value: Some(_)`** is `ComputationNode::constant(value)`
+  (new `pub` constructor) or the optimizer's own folded results, which are always
+  rebuilt via `ComputationNode::constant` too — so a folded subexpression is eligible for
+  further folding one level up, exactly like a literal. `ComputationNode::leaf(...)`
+  (the pre-existing general constructor) always sets `constant_value: None`, including
+  for a closure that happens to be deterministic (e.g. always returns `0.0`) — constancy
+  is a structural fact about *how a node was built*, never an inference from behavior.
+- **`Uncertain::point` now builds via `ComputationNode::constant`** instead of the
+  generic `Uncertain::new`, so every `point(v)` is structurally constant to the optimizer
+  without changing `point`'s public signature or behavior.
+- **`GraphOptimizer` is not wired into `Uncertain<T>`'s arithmetic operators** (`+`, `*`,
+  etc. in `src/operations/arithmetic.rs` build a graph via `Uncertain::with_node` and
+  never call `GraphOptimizer::optimize`) — discovered while implementing this spec, and
+  unchanged by it: `GraphOptimizer` remains an opt-in utility a caller invokes manually
+  (as `examples/optimizations/*.rs` already did). This affects how the acceptance tests
+  are exercised: the `bernoulli(0.99)`-style test uses a deterministic low-entropy
+  closure (`ComputationNode::leaf(|| if rand::random::<f64>() < 0.99 {1.0} else {0.0})`)
+  and asserts `is_constant_zero`/`is_constant_one` structurally rather than routing
+  through `Uncertain::bernoulli` + `probability_exceeds` end-to-end, since there's no
+  automatic optimization pass in that path to exercise. The `point(0.0) + x` /
+  `point(2.0) * point(3.0)` / same-seed-equivalence tests do use the real public
+  `Uncertain<T>` API (`Uncertain::point`, `Uncertain::normal`, `sample_with`), reaching
+  into the `pub(crate) node` field and calling `GraphOptimizer::new().optimize(...)`
+  manually, since that's the only way this functionality is invoked today. Whether to
+  wire optimization into the arithmetic operators automatically is a separate, unscoped
+  design decision — flagged here for Spec 08 (effective CSE) to pick up, since CSE has
+  the same "never automatically invoked" characteristic.
+- **`examples/optimizations/graph_optimization.rs`** had its literal `0`/`1` operands
+  (`zero_node`/`one_node`) switched from `ComputationNode::leaf(...)` to
+  `ComputationNode::constant(...)` — with the old sampling-based check removed, the demo
+  would otherwise silently stop demonstrating identity elimination/constant folding
+  (the operations just wouldn't fire) while still printing the same correct final number
+  from evaluation. `examples/optimizations/common_subexpression_optimization.rs` only
+  exercises CSE (not identity/constant folding) and needed no change.
+- Ten pre-existing functions' CRAP scores *improved* as a side effect (mostly the
+  `check_*_identities` helpers, simplified by moving the `Leaf`-pattern-match out of the
+  call sites and into `is_constant_zero`/`is_constant_one` themselves); `crap_baseline.json`
+  regenerated to capture this, plus the new `ComputationNode::constant` function and the
+  removal of the old sample-based `is_constant`/`is_constant_bool` helpers (no longer
+  needed now that callers pattern-match `constant_value` directly).
