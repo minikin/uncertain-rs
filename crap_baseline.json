@@ -365,7 +365,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::binary_op",
-      "line": 321,
+      "line": 351,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -374,7 +374,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::compute_complexity",
-      "line": 405,
+      "line": 435,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0,
@@ -383,7 +383,16 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::conditional",
-      "line": 346,
+      "line": 376,
+      "cyclomatic": 1.0,
+      "coverage": 100.0,
+      "crap": 1.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
+      "function": "ComputationNode::constant",
+      "line": 337,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -392,7 +401,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::depth",
-      "line": 377,
+      "line": 407,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0,
@@ -401,7 +410,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::evaluate",
-      "line": 191,
+      "line": 199,
       "cyclomatic": 9.0,
       "coverage": 100.0,
       "crap": 9.0,
@@ -410,7 +419,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::evaluate_arithmetic",
-      "line": 240,
+      "line": 248,
       "cyclomatic": 13.0,
       "coverage": 100.0,
       "crap": 13.0,
@@ -419,7 +428,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::evaluate_bool",
-      "line": 480,
+      "line": 510,
       "cyclomatic": 11.0,
       "coverage": 100.0,
       "crap": 11.0,
@@ -428,7 +437,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::evaluate_fresh",
-      "line": 299,
+      "line": 307,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -437,7 +446,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::has_conditionals",
-      "line": 392,
+      "line": 422,
       "cyclomatic": 6.0,
       "coverage": 100.0,
       "crap": 6.0,
@@ -446,7 +455,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::hash_structure",
-      "line": 435,
+      "line": 465,
       "cyclomatic": 5.0,
       "coverage": 55.172413793103445,
       "crap": 7.252039854032556,
@@ -455,7 +464,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::leaf",
-      "line": 309,
+      "line": 320,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -464,7 +473,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::map",
-      "line": 334,
+      "line": 364,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -473,7 +482,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::node_count",
-      "line": 360,
+      "line": 390,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0,
@@ -482,7 +491,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "ComputationNode::structural_hash",
-      "line": 426,
+      "line": 456,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -491,7 +500,25 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::check_addition_identities",
-      "line": 674,
+      "line": 704,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
+      "function": "GraphOptimizer::check_division_identities",
+      "line": 759,
+      "cyclomatic": 2.0,
+      "coverage": 100.0,
+      "crap": 2.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
+      "function": "GraphOptimizer::check_multiplication_identities",
+      "line": 735,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0,
@@ -499,35 +526,17 @@
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
-      "function": "GraphOptimizer::check_division_identities",
-      "line": 798,
-      "cyclomatic": 3.0,
-      "coverage": 100.0,
-      "crap": 3.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
-      "function": "GraphOptimizer::check_multiplication_identities",
-      "line": 733,
-      "cyclomatic": 9.0,
-      "coverage": 100.0,
-      "crap": 9.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::check_subtraction_identities",
-      "line": 710,
-      "cyclomatic": 3.0,
+      "line": 721,
+      "cyclomatic": 2.0,
       "coverage": 100.0,
-      "crap": 3.0,
+      "crap": 2.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::constant_folding",
-      "line": 912,
+      "line": 871,
       "cyclomatic": 5.0,
       "coverage": 100.0,
       "crap": 5.0,
@@ -536,16 +545,16 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::constant_folding_binary_op",
-      "line": 935,
-      "cyclomatic": 8.0,
-      "coverage": 79.3103448275862,
-      "crap": 8.56681290745828,
+      "line": 894,
+      "cyclomatic": 6.0,
+      "coverage": 100.0,
+      "crap": 6.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::constant_folding_bool",
-      "line": 1042,
+      "line": 995,
       "cyclomatic": 4.0,
       "coverage": 40.0,
       "crap": 7.4559999999999995,
@@ -554,7 +563,16 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::constant_folding_bool_conditional",
-      "line": 1084,
+      "line": 1035,
+      "cyclomatic": 3.0,
+      "coverage": 0.0,
+      "crap": 12.0,
+      "crate": "uncertain-rs"
+    },
+    {
+      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
+      "function": "GraphOptimizer::constant_folding_bool_unary_op",
+      "line": 1010,
       "cyclomatic": 4.0,
       "coverage": 0.0,
       "crap": 20.0,
@@ -562,35 +580,26 @@
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
-      "function": "GraphOptimizer::constant_folding_bool_unary_op",
-      "line": 1057,
-      "cyclomatic": 5.0,
-      "coverage": 0.0,
-      "crap": 30.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::constant_folding_conditional",
-      "line": 1008,
-      "cyclomatic": 4.0,
-      "coverage": 76.0,
-      "crap": 4.221184,
+      "line": 963,
+      "cyclomatic": 3.0,
+      "coverage": 100.0,
+      "crap": 3.0,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::constant_folding_unary_op",
-      "line": 978,
-      "cyclomatic": 5.0,
-      "coverage": 71.42857142857143,
-      "crap": 5.5830903790087465,
+      "line": 934,
+      "cyclomatic": 4.0,
+      "coverage": 70.0,
+      "crap": 4.432,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::default",
-      "line": 1142,
+      "line": 1064,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0,
@@ -599,7 +608,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::eliminate_common_subexpressions",
-      "line": 544,
+      "line": 574,
       "cyclomatic": 7.0,
       "coverage": 61.36363636363637,
       "crap": 9.82608236288505,
@@ -608,7 +617,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::eliminate_identity_operations",
-      "line": 608,
+      "line": 638,
       "cyclomatic": 5.0,
       "coverage": 62.5,
       "crap": 6.318359375,
@@ -617,16 +626,16 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::eliminate_identity_operations_binary",
-      "line": 631,
+      "line": 661,
       "cyclomatic": 9.0,
-      "coverage": 89.28571428571429,
-      "crap": 9.099626457725947,
+      "coverage": 96.42857142857143,
+      "crap": 9.003689868804665,
       "crate": "uncertain-rs"
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::eliminate_identity_operations_bool",
-      "line": 856,
+      "line": 808,
       "cyclomatic": 4.0,
       "coverage": 0.0,
       "crap": 20.0,
@@ -635,7 +644,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::eliminate_identity_operations_conditional",
-      "line": 836,
+      "line": 788,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0,
@@ -644,7 +653,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::eliminate_identity_operations_unary",
-      "line": 821,
+      "line": 773,
       "cyclomatic": 1.0,
       "coverage": 0.0,
       "crap": 2.0,
@@ -652,26 +661,8 @@
     },
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
-      "function": "GraphOptimizer::is_constant",
-      "line": 1114,
-      "cyclomatic": 3.0,
-      "coverage": 100.0,
-      "crap": 3.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
-      "function": "GraphOptimizer::is_constant_bool",
-      "line": 1129,
-      "cyclomatic": 3.0,
-      "coverage": 100.0,
-      "crap": 3.0,
-      "crate": "uncertain-rs"
-    },
-    {
-      "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::is_constant_one",
-      "line": 898,
+      "line": 857,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -680,7 +671,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::is_constant_zero",
-      "line": 884,
+      "line": 841,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -689,7 +680,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::new",
-      "line": 526,
+      "line": 556,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -698,7 +689,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphOptimizer::optimize",
-      "line": 534,
+      "line": 564,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -707,7 +698,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphProfiler::default",
-      "line": 1344,
+      "line": 1266,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -716,7 +707,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphProfiler::get_stats",
-      "line": 1300,
+      "line": 1222,
       "cyclomatic": 3.0,
       "coverage": 95.45454545454545,
       "crap": 3.000845229151014,
@@ -725,7 +716,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphProfiler::new",
-      "line": 1275,
+      "line": 1197,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -734,7 +725,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphProfiler::print_report",
-      "line": 1327,
+      "line": 1249,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -743,7 +734,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphProfiler::profile_execution",
-      "line": 1282,
+      "line": 1204,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -752,7 +743,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphVisualizer::add_node_to_dot",
-      "line": 1164,
+      "line": 1086,
       "cyclomatic": 9.0,
       "coverage": 93.02325581395348,
       "crap": 9.02750701196121,
@@ -761,7 +752,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphVisualizer::print_tree",
-      "line": 1221,
+      "line": 1143,
       "cyclomatic": 9.0,
       "coverage": 47.22222222222222,
       "crap": 20.907986111111114,
@@ -770,7 +761,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/computation.rs",
       "function": "GraphVisualizer::to_dot",
-      "line": 1153,
+      "line": 1075,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -878,7 +869,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::bernoulli",
-      "line": 408,
+      "line": 421,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -887,7 +878,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::beta",
-      "line": 349,
+      "line": 362,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -896,7 +887,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::binomial",
-      "line": 443,
+      "line": 456,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -905,7 +896,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::categorical",
-      "line": 205,
+      "line": 218,
       "cyclomatic": 3.0,
       "coverage": 94.44444444444444,
       "crap": 3.001543209876543,
@@ -914,7 +905,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::empirical",
-      "line": 169,
+      "line": 182,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -923,7 +914,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::exponential",
-      "line": 304,
+      "line": 317,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -932,7 +923,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::gamma",
-      "line": 373,
+      "line": 386,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -941,7 +932,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::gamma_unchecked",
-      "line": 379,
+      "line": 392,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -950,7 +941,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::geometric",
-      "line": 508,
+      "line": 521,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -959,7 +950,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::log_normal",
-      "line": 326,
+      "line": 339,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -968,7 +959,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::mixture",
-      "line": 112,
+      "line": 125,
       "cyclomatic": 6.0,
       "coverage": 96.96969696969697,
       "crap": 6.001001753067869,
@@ -977,7 +968,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::normal",
-      "line": 248,
+      "line": 261,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -986,7 +977,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::normal_unchecked",
-      "line": 254,
+      "line": 267,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -995,7 +986,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::point",
-      "line": 87,
+      "line": 89,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -1004,7 +995,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::poisson",
-      "line": 471,
+      "line": 484,
       "cyclomatic": 4.0,
       "coverage": 100.0,
       "crap": 4.0,
@@ -1013,7 +1004,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "Uncertain::uniform",
-      "line": 276,
+      "line": 289,
       "cyclomatic": 4.0,
       "coverage": 100.0,
       "crap": 4.0,
@@ -1022,7 +1013,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "validate_finite",
-      "line": 13,
+      "line": 15,
       "cyclomatic": 2.0,
       "coverage": 100.0,
       "crap": 2.0,
@@ -1031,7 +1022,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "validate_left_open_unit_interval",
-      "line": 60,
+      "line": 62,
       "cyclomatic": 4.0,
       "coverage": 100.0,
       "crap": 4.0,
@@ -1040,7 +1031,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "validate_non_negative",
-      "line": 34,
+      "line": 36,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -1049,7 +1040,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "validate_positive",
-      "line": 21,
+      "line": 23,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -1058,7 +1049,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/distributions.rs",
       "function": "validate_unit_interval",
-      "line": 47,
+      "line": 49,
       "cyclomatic": 3.0,
       "coverage": 100.0,
       "crap": 3.0,
@@ -2246,7 +2237,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::eq_value",
-      "line": 470,
+      "line": 471,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2255,7 +2246,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::filter",
-      "line": 193,
+      "line": 194,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2264,7 +2255,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::flat_map",
-      "line": 170,
+      "line": 171,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2273,7 +2264,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::fmt",
-      "line": 487,
+      "line": 488,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2282,7 +2273,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::ge",
-      "line": 453,
+      "line": 454,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2291,7 +2282,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::greater_than",
-      "line": 409,
+      "line": 410,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2300,7 +2291,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::gt",
-      "line": 439,
+      "line": 440,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2309,7 +2300,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::id",
-      "line": 97,
+      "line": 98,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2318,7 +2309,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::le",
-      "line": 460,
+      "line": 461,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2327,7 +2318,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::less_than",
-      "line": 396,
+      "line": 397,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2336,7 +2327,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::lt",
-      "line": 446,
+      "line": 447,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2345,7 +2336,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::map",
-      "line": 151,
+      "line": 152,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2354,7 +2345,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::ne_value",
-      "line": 477,
+      "line": 478,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2372,7 +2363,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::sample",
-      "line": 112,
+      "line": 113,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2381,7 +2372,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::sample_with",
-      "line": 135,
+      "line": 136,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2390,7 +2381,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::samples",
-      "line": 218,
+      "line": 219,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2399,7 +2390,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples",
-      "line": 232,
+      "line": 233,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2408,7 +2399,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_cached",
-      "line": 350,
+      "line": 351,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2417,7 +2408,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_cached_par",
-      "line": 382,
+      "line": 383,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2426,7 +2417,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_par",
-      "line": 290,
+      "line": 291,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2435,7 +2426,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_with",
-      "line": 256,
+      "line": 257,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2444,7 +2435,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::take_samples_with_par",
-      "line": 320,
+      "line": 321,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,
@@ -2453,7 +2444,7 @@
     {
       "file": "/Users/mnkn/GitHub/uncertain-rs/src/uncertain.rs",
       "function": "Uncertain::with_node",
-      "line": 73,
+      "line": 74,
       "cyclomatic": 1.0,
       "coverage": 100.0,
       "crap": 1.0,

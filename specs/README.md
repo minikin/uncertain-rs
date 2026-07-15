@@ -15,7 +15,7 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
 | 04  | [Seedable RNG & reproducibility](04-seedable-rng.md)             | P0       | High   | no         | Implemented           |
 | 05  | [Correct sampling via rand_distr](05-rand-distr-sampling.md)     | P0       | Medium | no         | Implemented           |
 | 06  | [Total graph evaluation](06-total-graph-evaluation.md)           | P0       | Medium | **yes**    | Implemented           |
-| 07  | [Sound constant folding](07-sound-constant-folding.md)           | P0       | Medium | no         | Pending               |
+| 07  | [Sound constant folding](07-sound-constant-folding.md)           | P0       | Medium | no         | Implemented           |
 | 08  | [Effective CSE](08-effective-cse.md)                             | P1       | Medium | no         | Pending               |
 | 09  | [Consistent variance policy](09-variance-policy.md)              | P1       | Low    | behavioral | Pending               |
 | 10  | [Bounded caches, no NaN paths](10-bounded-caches.md)             | P1       | Medium | no         | Partially implemented |
@@ -58,6 +58,12 @@ a spec is closed only when every acceptance test passes and `just dev` is green.
    count/quantile/confidence/bandwidth are genuine per-call parameters) — see 18's spec
    for the full per-method breakdown.)_
 4. **07 → 08** — optimizer correctness before optimizer effectiveness.
+   _(07 implemented; constancy decided via a `constant_value: Option<T>` field on
+   `Leaf` — set only by the new `ComputationNode::constant`/`Uncertain::point` — rather
+   than the old sample-3x-and-compare check, which could silently fold a low-entropy
+   distribution (e.g. `bernoulli(0.99)`) into a constant. Discovered along the way:
+   `GraphOptimizer` isn't wired into `Uncertain<T>`'s arithmetic operators at all — it's
+   an opt-in utility invoked manually, unchanged by this spec but relevant to 08.)_
 5. **09, 10, 11, 14, 15, 17, 19** in any order.
 6. **12, 13, 16** — feature/polish tail.
 

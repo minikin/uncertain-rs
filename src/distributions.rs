@@ -1,6 +1,7 @@
 #![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
 
 use crate::Uncertain;
+use crate::computation::ComputationNode;
 use crate::error::{Result, UncertainError};
 use crate::rng::{random_f64, with_rng};
 use crate::traits::Shareable;
@@ -9,6 +10,7 @@ use rand_distr::{
     Bernoulli, Beta, Binomial, Exp, Gamma, Geometric, LogNormal, Normal, Poisson, Uniform,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
 fn validate_finite(name: &'static str, value: f64) -> Result<()> {
     if value.is_finite() {
@@ -85,7 +87,18 @@ where
     /// ```
     #[must_use]
     pub fn point(value: T) -> Self {
-        Uncertain::new(move || value.clone())
+        let sampler: Arc<dyn Fn() -> T + Send + Sync> = {
+            let value = value.clone();
+            Arc::new(move || value.clone())
+        };
+        let id = uuid::Uuid::new_v4();
+        let node = ComputationNode::constant(value);
+
+        Self {
+            id,
+            sample_fn: sampler,
+            node,
+        }
     }
 
     /// Creates a mixture of distributions with optional weights

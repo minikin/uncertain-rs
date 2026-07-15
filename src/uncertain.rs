@@ -60,6 +60,7 @@ where
         let node = ComputationNode::Leaf {
             id,
             sample: sampler.clone(),
+            constant_value: None,
         };
 
         Self {

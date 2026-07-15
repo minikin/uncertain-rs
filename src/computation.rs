@@ -144,6 +144,14 @@ pub enum ComputationNode<T> {
     Leaf {
         id: uuid::Uuid,
         sample: Arc<dyn Fn() -> T + Send + Sync>,
+        /// The value this leaf is structurally known to always produce, if any.
+        /// `Some` only for leaves built via [`ComputationNode::constant`] (and,
+        /// transitively, `Uncertain::point` and the optimizer's own folded results) —
+        /// storing the value directly (rather than re-sampling to check it) means the
+        /// optimizer's constancy checks never call `sample` at all. Never set by
+        /// sampling and comparing — a low-entropy distribution (e.g. `bernoulli(0.99)`)
+        /// could return equal samples by chance and be silently, incorrectly folded.
+        constant_value: Option<T>,
     },
 
     /// Binary operation node for combining two uncertain values
@@ -190,7 +198,7 @@ where
     /// which handles conditionals, or `evaluate_bool` for boolean graphs).
     pub fn evaluate(&self, context: &mut SampleContext) -> Result<T, UncertainError> {
         match self {
-            ComputationNode::Leaf { id, sample } => {
+            ComputationNode::Leaf { id, sample, .. } => {
                 // Check if we already have a memoized value for this node
                 if let Some(cached) = context.get_value::<T>(id) {
                     Ok(cached)
@@ -242,7 +250,7 @@ where
         T: Arithmetic,
     {
         match self {
-            ComputationNode::Leaf { id, sample } => {
+            ComputationNode::Leaf { id, sample, .. } => {
                 if let Some(cached) = context.get_value::<T>(id) {
                     Ok(cached)
                 } else {
@@ -305,7 +313,10 @@ where
             .expect("graphs built via the public Uncertain<T> API are always well-formed")
     }
 
-    /// Creates a new leaf node
+    /// Creates a new leaf node from an arbitrary sampling function
+    ///
+    /// The result is never treated as structurally constant by the optimizer — use
+    /// [`ComputationNode::constant`] for a leaf whose value is known not to vary.
     pub fn leaf<F>(sample: F) -> Self
     where
         F: Fn() -> T + Send + Sync + 'static,
@@ -313,6 +324,25 @@ where
         ComputationNode::Leaf {
             id: uuid::Uuid::new_v4(),
             sample: Arc::new(sample),
+            constant_value: None,
+        }
+    }
+
+    /// Creates a leaf node whose value is structurally known to be constant
+    ///
+    /// This is the only way to mark a node as constant for the optimizer's identity
+    /// elimination and constant folding passes — deciding constancy by sampling and
+    /// comparing is unsound (a low-entropy distribution can return equal samples by
+    /// chance) and is never done.
+    pub fn constant(value: T) -> Self
+    where
+        T: Clone + Send + Sync + 'static,
+    {
+        let stored = value.clone();
+        ComputationNode::Leaf {
+            id: uuid::Uuid::new_v4(),
+            sample: Arc::new(move || value.clone()),
+            constant_value: Some(stored),
         }
     }
 
@@ -479,7 +509,7 @@ impl ComputationNode<bool> {
     /// operations, and `bool` doesn't implement `Arithmetic`).
     pub fn evaluate_bool(&self, context: &mut SampleContext) -> Result<bool, UncertainError> {
         match self {
-            ComputationNode::Leaf { id, sample } => {
+            ComputationNode::Leaf { id, sample, .. } => {
                 if let Some(cached) = context.get_value::<bool>(id) {
                     Ok(cached)
                 } else {
@@ -678,30 +708,11 @@ impl GraphOptimizer {
     where
         T: Shareable + Arithmetic + PartialEq + Clone,
     {
-        match (left, right) {
-            // x + 0 = x
-            (
-                left,
-                ComputationNode::Leaf {
-                    sample: right_sample,
-                    ..
-                },
-            ) => {
-                if Self::is_constant_zero(right_sample) {
-                    return Some(left.clone());
-                }
-            }
-            // 0 + x = x
-            (
-                ComputationNode::Leaf {
-                    sample: left_sample,
-                    ..
-                },
-                right,
-            ) if Self::is_constant_zero(left_sample) => {
-                return Some(right.clone());
-            }
-            _ => {}
+        if Self::is_constant_zero(right) {
+            return Some(left.clone());
+        }
+        if Self::is_constant_zero(left) {
+            return Some(right.clone());
         }
         None
     }
@@ -714,16 +725,7 @@ impl GraphOptimizer {
     where
         T: Shareable + Arithmetic + PartialEq + Clone,
     {
-        // x - 0 = x
-        if let (
-            left,
-            ComputationNode::Leaf {
-                sample: right_sample,
-                ..
-            },
-        ) = (left, right)
-            && Self::is_constant_zero(right_sample)
-        {
+        if Self::is_constant_zero(right) {
             return Some(left.clone());
         }
         None
@@ -737,58 +739,17 @@ impl GraphOptimizer {
     where
         T: Shareable + Arithmetic + PartialEq + Clone,
     {
-        // Check for zero multiplication first (x * 0 = 0, 0 * x = 0)
-        match (left, right) {
-            // x * 0 = 0
-            (
-                _left,
-                ComputationNode::Leaf {
-                    sample: right_sample,
-                    ..
-                },
-            ) => {
-                if Self::is_constant_zero(right_sample) {
-                    return Some(ComputationNode::leaf(|| T::zero()));
-                }
-            }
-            // 0 * x = 0
-            (
-                ComputationNode::Leaf {
-                    sample: left_sample,
-                    ..
-                },
-                _right,
-            ) if Self::is_constant_zero(left_sample) => {
-                return Some(ComputationNode::leaf(|| T::zero()));
-            }
-            _ => {}
+        // x * 0 = 0, 0 * x = 0
+        if Self::is_constant_zero(right) || Self::is_constant_zero(left) {
+            return Some(ComputationNode::constant(T::zero()));
         }
 
-        // Check for identity multiplication (x * 1 = x, 1 * x = x)
-        match (left, right) {
-            // x * 1 = x
-            (
-                left,
-                ComputationNode::Leaf {
-                    sample: right_sample,
-                    ..
-                },
-            ) => {
-                if Self::is_constant_one(right_sample) {
-                    return Some(left.clone());
-                }
-            }
-            // 1 * x = x
-            (
-                ComputationNode::Leaf {
-                    sample: left_sample,
-                    ..
-                },
-                right,
-            ) if Self::is_constant_one(left_sample) => {
-                return Some(right.clone());
-            }
-            _ => {}
+        // x * 1 = x, 1 * x = x
+        if Self::is_constant_one(right) {
+            return Some(left.clone());
+        }
+        if Self::is_constant_one(left) {
+            return Some(right.clone());
         }
 
         None
@@ -802,16 +763,7 @@ impl GraphOptimizer {
     where
         T: Shareable + Arithmetic + PartialEq + Clone,
     {
-        // x / 1 = x
-        if let (
-            left,
-            ComputationNode::Leaf {
-                sample: right_sample,
-                ..
-            },
-        ) = (left, right)
-            && Self::is_constant_one(right_sample)
-        {
+        if Self::is_constant_one(right) {
             return Some(left.clone());
         }
         None
@@ -880,32 +832,39 @@ impl GraphOptimizer {
         }
     }
 
-    /// Helper function to check if a sampling function returns zero
-    fn is_constant_zero<T>(sample_fn: &Arc<dyn Fn() -> T + Send + Sync>) -> bool
+    /// Checks whether a node is structurally constant and equal to zero
+    ///
+    /// Never decided by sampling: a low-entropy distribution could return equal
+    /// samples by chance and be silently, incorrectly folded. Only leaves built via
+    /// [`ComputationNode::constant`] carry a `constant_value`; it's compared directly
+    /// with no call to `sample` at all.
+    fn is_constant_zero<T>(node: &ComputationNode<T>) -> bool
     where
-        T: PartialEq + Clone + Arithmetic,
+        T: PartialEq + Arithmetic,
     {
-        // Sample a few times to check if it's consistently zero
-        for _ in 0..3 {
-            if sample_fn() != T::zero() {
-                return false;
-            }
+        match node {
+            ComputationNode::Leaf {
+                constant_value: Some(value),
+                ..
+            } => *value == T::zero(),
+            _ => false,
         }
-        true
     }
 
-    /// Helper function to check if a sampling function returns one
-    fn is_constant_one<T>(sample_fn: &Arc<dyn Fn() -> T + Send + Sync>) -> bool
+    /// Checks whether a node is structurally constant and equal to one
+    ///
+    /// See [`GraphOptimizer::is_constant_zero`] for why this is structural, not sampled.
+    fn is_constant_one<T>(node: &ComputationNode<T>) -> bool
     where
-        T: PartialEq + Clone + Arithmetic,
+        T: PartialEq + Arithmetic,
     {
-        // Sample a few times to check if it's consistently one
-        for _ in 0..3 {
-            if sample_fn() != T::one() {
-                return false;
-            }
+        match node {
+            ComputationNode::Leaf {
+                constant_value: Some(value),
+                ..
+            } => *value == T::one(),
+            _ => false,
         }
-        true
     }
 
     /// Performs constant folding for compile-time evaluation of constant expressions
@@ -945,26 +904,23 @@ impl GraphOptimizer {
 
         if let (
             ComputationNode::Leaf {
-                sample: left_sample,
+                constant_value: Some(left_val),
                 ..
             },
             ComputationNode::Leaf {
-                sample: right_sample,
+                constant_value: Some(right_val),
                 ..
             },
         ) = (&left_opt, &right_opt)
-            && Self::is_constant(left_sample)
-            && Self::is_constant(right_sample)
         {
-            let left_val = left_sample();
-            let right_val = right_sample();
+            let (left_val, right_val) = (left_val.clone(), right_val.clone());
             let result = match operation {
                 BinaryOperation::Add => left_val + right_val,
                 BinaryOperation::Sub => left_val - right_val,
                 BinaryOperation::Mul => left_val * right_val,
                 BinaryOperation::Div => left_val / right_val,
             };
-            return ComputationNode::leaf(move || result.clone());
+            return ComputationNode::constant(result);
         }
 
         ComputationNode::BinaryOp {
@@ -985,17 +941,16 @@ impl GraphOptimizer {
         let operand_opt = Self::constant_folding(operand);
 
         if let ComputationNode::Leaf {
-            sample: operand_sample,
+            constant_value: Some(operand_val),
             ..
         } = &operand_opt
-            && Self::is_constant(operand_sample)
         {
-            let operand_val = operand_sample();
+            let operand_val = operand_val.clone();
             let result = match operation {
                 UnaryOperation::Map(func) => func(operand_val),
                 UnaryOperation::Filter(_) => operand_val, // Filter doesn't change the value
             };
-            return ComputationNode::leaf(move || result.clone());
+            return ComputationNode::constant(result);
         }
 
         ComputationNode::UnaryOp {
@@ -1019,13 +974,11 @@ impl GraphOptimizer {
 
         // Check if condition is constant
         if let ComputationNode::Leaf {
-            sample: condition_sample,
+            constant_value: Some(condition_val),
             ..
         } = &condition_opt
-            && Self::is_constant_bool(condition_sample)
         {
-            let condition_val = condition_sample();
-            if condition_val {
+            if *condition_val {
                 return if_true_opt;
             }
             return if_false_opt;
@@ -1061,17 +1014,15 @@ impl GraphOptimizer {
         let operand_opt = Self::constant_folding_bool(operand);
 
         if let ComputationNode::Leaf {
-            sample: operand_sample,
+            constant_value: Some(operand_val),
             ..
         } = &operand_opt
-            && Self::is_constant_bool(operand_sample)
         {
-            let operand_val = operand_sample();
             let result = match operation {
-                UnaryOperation::Map(func) => func(operand_val),
-                UnaryOperation::Filter(_) => operand_val, // Filter doesn't change the value
+                UnaryOperation::Map(func) => func(*operand_val),
+                UnaryOperation::Filter(_) => *operand_val, // Filter doesn't change the value
             };
-            return ComputationNode::leaf(move || result);
+            return ComputationNode::constant(result);
         }
 
         ComputationNode::UnaryOp {
@@ -1091,13 +1042,11 @@ impl GraphOptimizer {
         let if_false_opt = Self::constant_folding_bool(if_false);
 
         if let ComputationNode::Leaf {
-            sample: condition_sample,
+            constant_value: Some(condition_val),
             ..
         } = &condition_opt
-            && Self::is_constant_bool(condition_sample)
         {
-            let condition_val = condition_sample();
-            if condition_val {
+            if *condition_val {
                 return if_true_opt;
             }
             return if_false_opt;
@@ -1108,33 +1057,6 @@ impl GraphOptimizer {
             if_true: Box::new(if_true_opt),
             if_false: Box::new(if_false_opt),
         }
-    }
-
-    /// Helper function to check if a sampling function returns a constant value
-    fn is_constant<T>(sample_fn: &Arc<dyn Fn() -> T + Send + Sync>) -> bool
-    where
-        T: PartialEq + Clone,
-    {
-        // Sample a few times to check if it's consistently the same value
-        let first_sample = sample_fn();
-        for _ in 0..3 {
-            if sample_fn() != first_sample {
-                return false;
-            }
-        }
-        true
-    }
-
-    /// Helper function to check if a boolean sampling function returns a constant value
-    fn is_constant_bool(sample_fn: &Arc<dyn Fn() -> bool + Send + Sync>) -> bool {
-        // Sample a few times to check if it's consistently the same value
-        let first_sample = sample_fn();
-        for _ in 0..3 {
-            if sample_fn() != first_sample {
-                return false;
-            }
-        }
-        true
     }
 }
 
@@ -1405,6 +1327,7 @@ mod tests {
         let leaf = ComputationNode::Leaf {
             id: leaf_id,
             sample: Arc::new(rand::random::<f64>),
+            constant_value: None,
         };
 
         // Evaluate twice with the same context
@@ -1692,7 +1615,7 @@ mod tests {
     fn test_identity_operation_elimination() {
         // Test x + 0 = x
         let x = ComputationNode::leaf(|| 5.0);
-        let zero = ComputationNode::leaf(|| 0.0);
+        let zero = ComputationNode::constant(0.0);
         let add_zero = ComputationNode::binary_op(x.clone(), zero, BinaryOperation::Add);
 
         let optimized = GraphOptimizer::eliminate_identity_operations(add_zero);
@@ -1700,7 +1623,7 @@ mod tests {
         assert!((result - 5.0).abs() < f64::EPSILON);
 
         // Test x * 1 = x
-        let one = ComputationNode::leaf(|| 1.0);
+        let one = ComputationNode::constant(1.0);
         let mul_one = ComputationNode::binary_op(x.clone(), one, BinaryOperation::Mul);
 
         let optimized = GraphOptimizer::eliminate_identity_operations(mul_one);
@@ -1708,7 +1631,7 @@ mod tests {
         assert!((result - 5.0).abs() < f64::EPSILON);
 
         // Test x - 0 = x
-        let zero2 = ComputationNode::leaf(|| 0.0);
+        let zero2 = ComputationNode::constant(0.0);
         let sub_zero = ComputationNode::binary_op(x.clone(), zero2, BinaryOperation::Sub);
 
         let optimized = GraphOptimizer::eliminate_identity_operations(sub_zero);
@@ -1716,7 +1639,7 @@ mod tests {
         assert!((result - 5.0).abs() < f64::EPSILON);
 
         // Test x / 1 = x
-        let one2 = ComputationNode::leaf(|| 1.0);
+        let one2 = ComputationNode::constant(1.0);
         let div_one = ComputationNode::binary_op(x.clone(), one2, BinaryOperation::Div);
 
         let optimized = GraphOptimizer::eliminate_identity_operations(div_one);
@@ -1724,7 +1647,7 @@ mod tests {
         assert!((result - 5.0).abs() < f64::EPSILON);
 
         // Test x * 0 = 0
-        let zero3 = ComputationNode::leaf(|| 0.0);
+        let zero3 = ComputationNode::constant(0.0);
         let mul_zero = ComputationNode::binary_op(x.clone(), zero3, BinaryOperation::Mul);
 
         let optimized = GraphOptimizer::eliminate_identity_operations(mul_zero);
@@ -1735,8 +1658,8 @@ mod tests {
     #[test]
     fn test_constant_folding() {
         // Test constant addition: 2 + 3 = 5
-        let two = ComputationNode::leaf(|| 2.0);
-        let three = ComputationNode::leaf(|| 3.0);
+        let two = ComputationNode::constant(2.0);
+        let three = ComputationNode::constant(3.0);
         let add_const = ComputationNode::binary_op(two, three, BinaryOperation::Add);
 
         let optimized = GraphOptimizer::constant_folding(add_const);
@@ -1744,8 +1667,8 @@ mod tests {
         assert!((result - 5.0).abs() < f64::EPSILON);
 
         // Test constant multiplication: 4 * 5 = 20
-        let four = ComputationNode::leaf(|| 4.0);
-        let five = ComputationNode::leaf(|| 5.0);
+        let four = ComputationNode::constant(4.0);
+        let five = ComputationNode::constant(5.0);
         let mul_const = ComputationNode::binary_op(four, five, BinaryOperation::Mul);
 
         let optimized = GraphOptimizer::constant_folding(mul_const);
@@ -1753,8 +1676,8 @@ mod tests {
         assert!((result - 20.0).abs() < f64::EPSILON);
 
         // Test constant division: 10 / 2 = 5
-        let ten = ComputationNode::leaf(|| 10.0);
-        let two_div = ComputationNode::leaf(|| 2.0);
+        let ten = ComputationNode::constant(10.0);
+        let two_div = ComputationNode::constant(2.0);
         let div_const = ComputationNode::binary_op(ten, two_div, BinaryOperation::Div);
 
         let optimized = GraphOptimizer::constant_folding(div_const);
@@ -1762,8 +1685,8 @@ mod tests {
         assert!((result - 5.0).abs() < f64::EPSILON);
 
         // Test constant subtraction: 8 - 3 = 5
-        let eight = ComputationNode::leaf(|| 8.0);
-        let three_sub = ComputationNode::leaf(|| 3.0);
+        let eight = ComputationNode::constant(8.0);
+        let three_sub = ComputationNode::constant(3.0);
         let sub_const = ComputationNode::binary_op(eight, three_sub, BinaryOperation::Sub);
 
         let optimized = GraphOptimizer::constant_folding(sub_const);
@@ -1774,9 +1697,9 @@ mod tests {
     #[test]
     fn test_constant_folding_conditional() {
         // Test constant condition: if true then 10 else 20 = 10
-        let true_condition = ComputationNode::leaf(|| true);
-        let if_true = ComputationNode::leaf(|| 10.0);
-        let if_false = ComputationNode::leaf(|| 20.0);
+        let true_condition = ComputationNode::constant(true);
+        let if_true = ComputationNode::constant(10.0);
+        let if_false = ComputationNode::constant(20.0);
         let conditional = ComputationNode::conditional(true_condition, if_true, if_false);
 
         let optimized = GraphOptimizer::constant_folding(conditional);
@@ -1784,9 +1707,9 @@ mod tests {
         assert!((result - 10.0).abs() < f64::EPSILON);
 
         // Test constant condition: if false then 10 else 20 = 20
-        let false_condition = ComputationNode::leaf(|| false);
-        let if_true2 = ComputationNode::leaf(|| 10.0);
-        let if_false2 = ComputationNode::leaf(|| 20.0);
+        let false_condition = ComputationNode::constant(false);
+        let if_true2 = ComputationNode::constant(10.0);
+        let if_false2 = ComputationNode::constant(20.0);
         let conditional2 = ComputationNode::conditional(false_condition, if_true2, if_false2);
 
         let optimized = GraphOptimizer::constant_folding(conditional2);
@@ -1797,12 +1720,100 @@ mod tests {
     #[test]
     fn test_constant_folding_unary() {
         // Test constant unary operation: map(|x| x * 2) on constant 5 = 10
-        let five = ComputationNode::leaf(|| 5.0);
+        let five = ComputationNode::constant(5.0);
         let double = ComputationNode::map(five, |x| x * 2.0);
 
         let optimized = GraphOptimizer::constant_folding(double);
         let result: f64 = optimized.evaluate_fresh();
         assert!((result - 10.0).abs() < f64::EPSILON);
+    }
+
+    // Spec 07 acceptance tests: constant folding/identity elimination must decide
+    // constancy structurally, never by sampling.
+
+    #[test]
+    fn test_low_entropy_distribution_never_treated_as_constant() {
+        // Simulates `bernoulli(0.99)` mapped to `f64`: P(1.0) = 0.99. Under the old
+        // sample-3x-and-compare semantics, ~96% of runs would see three consecutive
+        // 1.0s and be silently (and incorrectly) folded into a constant. Structural
+        // constancy never inspects sampled values at all, so this is now a
+        // deterministic guarantee rather than a statistical one -- true regardless
+        // of how "constant-looking" any given run's samples happen to be.
+        let low_entropy = ComputationNode::leaf(|| {
+            if rand::random::<f64>() < 0.99 {
+                1.0
+            } else {
+                0.0
+            }
+        });
+        assert!(!GraphOptimizer::is_constant_zero(&low_entropy));
+        assert!(!GraphOptimizer::is_constant_one(&low_entropy));
+
+        // Downstream: an identity check against it must not fire either.
+        let x = ComputationNode::leaf(|| 5.0);
+        assert!(GraphOptimizer::check_addition_identities(&x, &low_entropy).is_none());
+    }
+
+    #[test]
+    fn test_point_zero_addition_folds_to_the_other_operand() {
+        let x = Uncertain::normal(5.0, 1.0).unwrap();
+        let expr = x.clone() + Uncertain::point(0.0);
+
+        let optimized = GraphOptimizer::new().optimize(expr.node.clone());
+
+        // x + 0 collapses back down to just x's own node -- same shape, same size.
+        assert_eq!(optimized.node_count(), x.node.node_count());
+        assert!(matches!(optimized, ComputationNode::Leaf { .. }));
+    }
+
+    #[test]
+    fn test_point_times_point_folds_to_a_single_constant() {
+        let expr: Uncertain<f64> = Uncertain::point(2.0) * Uncertain::point(3.0);
+
+        let optimized = GraphOptimizer::new().optimize(expr.node.clone());
+
+        match &optimized {
+            ComputationNode::Leaf {
+                constant_value: Some(value),
+                ..
+            } => assert!((value - 6.0).abs() < f64::EPSILON),
+            _ => panic!("expected a folded constant leaf"),
+        }
+    }
+
+    #[test]
+    fn test_tiny_variance_normal_is_not_folded() {
+        // A `normal(0, 1e-12)` has genuinely nonzero variance -- it must never be
+        // folded, no matter how close to a point mass it looks. `Uncertain::normal`
+        // always builds a plain (non-`constant`) leaf, so this holds structurally.
+        let tiny_variance = Uncertain::normal(0.0, 1e-12).unwrap();
+        assert!(!GraphOptimizer::is_constant_zero(&tiny_variance.node));
+    }
+
+    #[test]
+    fn test_optimized_and_unoptimized_graphs_sample_identically_under_same_seed() {
+        use rand::SeedableRng;
+        use rand_chacha::ChaCha8Rng;
+
+        // A moderately complex expression mixing genuine identity/constant
+        // opportunities (`+ point(0.0)`, `* point(1.0)`) with real randomness.
+        let x = Uncertain::normal(3.0, 1.0).unwrap();
+        let y = Uncertain::normal(2.0, 0.5).unwrap();
+        let expr = ((x.clone() + y.clone()) + Uncertain::point(0.0))
+            * (x.clone() - y.clone())
+            * Uncertain::point(1.0);
+
+        let optimized_node = GraphOptimizer::new().optimize(expr.node.clone());
+        let optimized = Uncertain::with_node(optimized_node);
+
+        let mut rng_a = ChaCha8Rng::seed_from_u64(2024);
+        let mut rng_b = ChaCha8Rng::seed_from_u64(2024);
+
+        for _ in 0..50 {
+            let unoptimized_sample = expr.sample_with(&mut rng_a);
+            let optimized_sample = optimized.sample_with(&mut rng_b);
+            assert!((unoptimized_sample - optimized_sample).abs() < f64::EPSILON);
+        }
     }
 
     #[test]
@@ -1932,6 +1943,7 @@ mod tests {
         let leaf = ComputationNode::Leaf {
             id: leaf_id,
             sample: Arc::new(rand::random::<bool>),
+            constant_value: None,
         };
 
         let val1 = leaf.evaluate_bool(&mut context).unwrap();
@@ -2199,29 +2211,41 @@ mod tests {
     #[test]
     fn test_check_addition_identities_both_orders_and_no_match() {
         let x = ComputationNode::leaf(|| 5.0);
-        let zero = ComputationNode::leaf(|| 0.0);
-        let nonzero = ComputationNode::leaf(|| 3.0);
-        // The "x + 0" arm matches whenever the RIGHT side is a Leaf, regardless
-        // of the left side, so it shadows the "0 + x" arm unless the right side
-        // is something other than a Leaf.
-        let non_leaf = ComputationNode::binary_op(x.clone(), nonzero.clone(), BinaryOperation::Add);
+        let zero = ComputationNode::constant(0.0);
+        let nonzero = ComputationNode::constant(3.0);
+        // The "x + 0" arm matches whenever the RIGHT side is structurally constant
+        // zero, regardless of the left side, so it shadows the "0 + x" arm unless
+        // the right side is something that isn't.
+        let non_constant =
+            ComputationNode::binary_op(x.clone(), nonzero.clone(), BinaryOperation::Add);
 
         // x + 0 = x
         assert!(GraphOptimizer::check_addition_identities(&x, &zero).is_some());
         // 0 + x = x
-        assert!(GraphOptimizer::check_addition_identities(&zero, &non_leaf).is_some());
+        assert!(GraphOptimizer::check_addition_identities(&zero, &non_constant).is_some());
         // neither side is zero: no identity applies
         assert!(GraphOptimizer::check_addition_identities(&x, &nonzero).is_none());
-        // left is a Leaf but not zero, right is not a Leaf: the "0 + x" arm's
-        // guard must actually check is_constant_zero, not always match.
-        assert!(GraphOptimizer::check_addition_identities(&nonzero, &non_leaf).is_none());
+        // left is constant but not zero, right isn't constant at all: the "0 + x"
+        // arm's guard must actually check is_constant_zero, not always match.
+        assert!(GraphOptimizer::check_addition_identities(&nonzero, &non_constant).is_none());
+    }
+
+    #[test]
+    fn test_check_addition_identities_never_fires_on_sampled_zero() {
+        // Soundness: a leaf that always happens to sample 0.0 is not structurally
+        // constant (it wasn't built via `ComputationNode::constant`), so it must
+        // never be folded away -- constancy is never decided by sampling and
+        // comparing, since a low-entropy distribution could look constant by chance.
+        let x = ComputationNode::leaf(|| 5.0);
+        let looks_like_zero = ComputationNode::leaf(|| 0.0);
+        assert!(GraphOptimizer::check_addition_identities(&x, &looks_like_zero).is_none());
     }
 
     #[test]
     fn test_check_subtraction_identities_match_and_no_match() {
         let x = ComputationNode::leaf(|| 5.0);
-        let zero = ComputationNode::leaf(|| 0.0);
-        let nonzero = ComputationNode::leaf(|| 3.0);
+        let zero = ComputationNode::constant(0.0);
+        let nonzero = ComputationNode::constant(3.0);
 
         // x - 0 = x
         assert!(GraphOptimizer::check_subtraction_identities(&x, &zero).is_some());
@@ -2231,35 +2255,36 @@ mod tests {
     #[test]
     fn test_check_multiplication_identities_all_orders_and_no_match() {
         let x = ComputationNode::leaf(|| 5.0);
-        let zero = ComputationNode::leaf(|| 0.0);
-        let one = ComputationNode::leaf(|| 1.0);
-        let nonzero = ComputationNode::leaf(|| 3.0);
-        // Same arm-shadowing consideration as addition: the "x op leaf" arms
-        // match whenever the right side is a Leaf, so the "leaf op x" arms
-        // need a non-Leaf right side to be reachable.
-        let non_leaf = ComputationNode::binary_op(x.clone(), nonzero.clone(), BinaryOperation::Add);
+        let zero = ComputationNode::constant(0.0);
+        let one = ComputationNode::constant(1.0);
+        let nonzero = ComputationNode::constant(3.0);
+        // Same shadowing consideration as addition: the "x op constant" arms match
+        // whenever the right side is structurally constant, so the "constant op x"
+        // arms need a non-constant right side to be reachable.
+        let non_constant =
+            ComputationNode::binary_op(x.clone(), nonzero.clone(), BinaryOperation::Add);
 
         // x * 0 = 0
         assert!(GraphOptimizer::check_multiplication_identities(&x, &zero).is_some());
         // 0 * x = 0
-        assert!(GraphOptimizer::check_multiplication_identities(&zero, &non_leaf).is_some());
+        assert!(GraphOptimizer::check_multiplication_identities(&zero, &non_constant).is_some());
         // x * 1 = x
         assert!(GraphOptimizer::check_multiplication_identities(&x, &one).is_some());
         // 1 * x = x
-        assert!(GraphOptimizer::check_multiplication_identities(&one, &non_leaf).is_some());
+        assert!(GraphOptimizer::check_multiplication_identities(&one, &non_constant).is_some());
         // no identity
         assert!(GraphOptimizer::check_multiplication_identities(&x, &nonzero).is_none());
-        // left is a Leaf but neither zero nor one, right is not a Leaf: both
-        // the "0 * x" and "1 * x" arms' guards must actually check their
+        // left is constant but neither zero nor one, right isn't constant at all:
+        // both the "0 * x" and "1 * x" arms' guards must actually check their
         // respective is_constant_zero/is_constant_one, not always match.
-        assert!(GraphOptimizer::check_multiplication_identities(&nonzero, &non_leaf).is_none());
+        assert!(GraphOptimizer::check_multiplication_identities(&nonzero, &non_constant).is_none());
     }
 
     #[test]
     fn test_check_division_identities_match_and_no_match() {
         let x = ComputationNode::leaf(|| 5.0);
-        let one = ComputationNode::leaf(|| 1.0);
-        let nonzero = ComputationNode::leaf(|| 3.0);
+        let one = ComputationNode::constant(1.0);
+        let nonzero = ComputationNode::constant(3.0);
 
         // x / 1 = x
         assert!(GraphOptimizer::check_division_identities(&x, &one).is_some());
@@ -2268,37 +2293,47 @@ mod tests {
 
     #[test]
     fn test_is_constant_zero_and_one() {
-        let zero_fn: Arc<dyn Fn() -> f64 + Send + Sync> = Arc::new(|| 0.0);
-        let one_fn: Arc<dyn Fn() -> f64 + Send + Sync> = Arc::new(|| 1.0);
+        let zero = ComputationNode::constant(0.0);
+        let one = ComputationNode::constant(1.0);
+        let nonzero = ComputationNode::constant(3.0);
 
-        assert!(GraphOptimizer::is_constant_zero(&zero_fn));
-        assert!(!GraphOptimizer::is_constant_zero(&one_fn));
-        assert!(GraphOptimizer::is_constant_one(&one_fn));
-        assert!(!GraphOptimizer::is_constant_one(&zero_fn));
+        assert!(GraphOptimizer::is_constant_zero(&zero));
+        assert!(!GraphOptimizer::is_constant_zero(&one));
+        assert!(GraphOptimizer::is_constant_one(&one));
+        assert!(!GraphOptimizer::is_constant_one(&zero));
+        assert!(!GraphOptimizer::is_constant_zero(&nonzero));
+        assert!(!GraphOptimizer::is_constant_one(&nonzero));
+
+        // Soundness: never decided by sampling -- a leaf that always samples 0.0/1.0
+        // but wasn't built via `ComputationNode::constant` is not treated as constant.
+        assert!(!GraphOptimizer::is_constant_zero(&ComputationNode::leaf(
+            || 0.0
+        )));
+        assert!(!GraphOptimizer::is_constant_one(&ComputationNode::leaf(
+            || 1.0
+        )));
     }
 
     #[test]
-    fn test_is_constant_generic() {
-        let const_fn: Arc<dyn Fn() -> f64 + Send + Sync> = Arc::new(|| 7.0);
-        assert!(GraphOptimizer::is_constant(&const_fn));
-
-        let counter = std::sync::Arc::new(std::sync::atomic::AtomicI64::new(0));
-        let counter2 = counter.clone();
-        let varying_fn: Arc<dyn Fn() -> f64 + Send + Sync> =
-            Arc::new(move || counter2.fetch_add(1, std::sync::atomic::Ordering::Relaxed) as f64);
-        assert!(!GraphOptimizer::is_constant(&varying_fn));
+    fn test_constant_folding_never_fires_on_sampled_constant() {
+        // A leaf that always returns the same value by construction (not a genuine
+        // distribution) but wasn't built via `ComputationNode::constant` must not be
+        // folded -- constant_folding_binary_op only checks the structural flag.
+        let const_looking = ComputationNode::leaf(|| 7.0);
+        let other = ComputationNode::leaf(|| 7.0);
+        let sum = ComputationNode::binary_op(const_looking, other, BinaryOperation::Add);
+        let folded = GraphOptimizer::constant_folding(sum);
+        assert!(matches!(folded, ComputationNode::BinaryOp { .. }));
     }
 
     #[test]
-    fn test_is_constant_bool() {
-        let const_fn: Arc<dyn Fn() -> bool + Send + Sync> = Arc::new(|| true);
-        assert!(GraphOptimizer::is_constant_bool(&const_fn));
-
-        let toggle = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-        let toggle2 = toggle.clone();
-        let varying_fn: Arc<dyn Fn() -> bool + Send + Sync> =
-            Arc::new(move || toggle2.fetch_xor(true, std::sync::atomic::Ordering::Relaxed));
-        assert!(!GraphOptimizer::is_constant_bool(&varying_fn));
+    fn test_constant_folding_bool_never_fires_on_sampled_constant() {
+        let const_looking_condition = ComputationNode::leaf(|| true);
+        let if_true = ComputationNode::leaf(|| 10.0);
+        let if_false = ComputationNode::leaf(|| 20.0);
+        let conditional = ComputationNode::conditional(const_looking_condition, if_true, if_false);
+        let folded = GraphOptimizer::constant_folding(conditional);
+        assert!(matches!(folded, ComputationNode::Conditional { .. }));
     }
 
     #[test]
