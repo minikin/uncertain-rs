@@ -84,7 +84,7 @@ impl Arithmetic for u64 {
 }
 
 /// Binary operation types for computation graph
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum BinaryOperation {
     Add,
     Sub,

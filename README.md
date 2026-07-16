@@ -177,24 +177,35 @@ See the [parallel sampling example](examples/parallel_sampling.rs) for benchmark
 The library includes a computation graph optimizer that can eliminate common subexpressions and improve performance:
 
 ```rust
-use uncertain_rs::{Uncertain, computation::GraphOptimizer};
+use uncertain_rs::{
+    computation::{ComputationNode, GraphOptimizer},
+    operations::arithmetic::BinaryOperation,
+};
 
-// Create an expression with common subexpressions
-let x = Uncertain::normal(2.0, 0.1).unwrap();
-let y = Uncertain::normal(3.0, 0.1).unwrap();
-let z = Uncertain::normal(1.0, 0.1).unwrap();
+// GraphOptimizer works on ComputationNode directly — it isn't wired into `Uncertain<T>`'s
+// arithmetic operators, so a graph built through `+`/`*` on `Uncertain<T>` has to be
+// reconstructed at the ComputationNode level to optimize it (see `examples/optimizations/`
+// for the full pattern building this up from `Uncertain::normal`).
+let x = ComputationNode::leaf(|| 2.0);
+let y = ComputationNode::leaf(|| 3.0);
+let z = ComputationNode::leaf(|| 1.0);
 
 // Expression: (x + y) * (x + y) + (x + y) * z
 // The subexpression (x + y) appears 3 times
-let sum = x.clone() + y.clone();
-let expr = (sum.clone() * sum.clone()) + (sum * z);
+let sum = ComputationNode::binary_op(x, y, BinaryOperation::Add);
+let expr = ComputationNode::binary_op(
+    ComputationNode::binary_op(sum.clone(), sum.clone(), BinaryOperation::Mul),
+    ComputationNode::binary_op(sum.clone(), z, BinaryOperation::Mul),
+    BinaryOperation::Add,
+);
 
 // Apply optimization to eliminate common subexpressions
 let mut optimizer = GraphOptimizer::new();
-let optimized = optimizer.eliminate_common_subexpressions(expr.into_computation_node());
+let optimized = optimizer.eliminate_common_subexpressions(expr);
 
 // The optimized graph reuses the (x + y) subexpression
-println!("Cache size: {}", optimizer.subexpression_cache.len());
+println!("Cache size: {}", optimizer.cache_size());
+println!("Result: {}", optimized.evaluate_fresh());
 ```
 
 ## Development Workflow

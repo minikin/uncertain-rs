@@ -231,3 +231,27 @@ let value = node.evaluate(&mut context)?;
 
 `GraphProfiler::get_stats` is unaffected by this section — it already returned `Option` and
 no longer has an internal (unreachable) `.expect()`.
+
+## `GraphOptimizer::subexpression_cache` is no longer a public field
+
+### Why
+
+The field's type changed to a private, collision-safe key internally (see the CHANGELOG's
+"Fixed" entry on `GraphOptimizer`'s subexpression cache), so it's no longer meaningful for
+callers to reach into directly.
+
+### How to update
+
+If you only checked its size (as the README's optimizer example did), use the new
+accessor:
+
+```rust
+// Before (0.2.x)
+// let size = optimizer.subexpression_cache.len();
+
+// After (0.3.0)
+let size = optimizer.cache_size();
+```
+
+`GraphOptimizer::cse_hits()` is new — the number of times a cached subexpression was
+reused instead of rebuilt.

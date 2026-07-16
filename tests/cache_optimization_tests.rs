@@ -148,12 +148,20 @@ fn test_structural_hash_consistency() {
         uncertain_rs::operations::arithmetic::BinaryOperation::Add,
     );
 
-    // TODO: These will have different hashes due to different UUIDs. We'd need node-level sharing for true CSE.
+    // node1 and node2 are built from independently-constructed leaves: each pair of
+    // `leaf(|| 1.0)`/`leaf(|| 2.0)` calls produces a distinct random variable (a fresh
+    // uuid), even though both leaves happen to always sample the same value. Per the
+    // correlation-preserving CSE rule (Spec 08), these must hash differently — unifying
+    // them would be incorrect if the leaves were ever changed to something non-constant
+    // (e.g. `normal(1.0, 1.0)`), since two independent draws are not the same variable.
+    // Only literal `.clone()`s of one node (sharing its leaf id) may ever unify.
     let hash1 = node1.structural_hash();
     let hash2 = node2.structural_hash();
 
-    // Hashes should be different due to different leaf IDs
-    assert_ne!(hash1, hash2);
+    assert_ne!(
+        hash1, hash2,
+        "independently-built leaves must never hash the same, regardless of the values they sample"
+    );
 
     // But the same node should always produce the same hash
     let hash1_again = node1.structural_hash();

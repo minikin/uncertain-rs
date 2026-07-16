@@ -44,10 +44,7 @@ fn main() {
     // Apply optimization
     let optimized_node = optimizer.eliminate_common_subexpressions(expr_node);
 
-    println!(
-        "Cache size after optimization: {}",
-        optimizer.subexpression_cache.len()
-    );
+    println!("Cache size after optimization: {}", optimizer.cache_size());
     println!("Optimized node count: {}", optimized_node.node_count());
 
     let result_with_opt = optimized_node.evaluate_fresh();

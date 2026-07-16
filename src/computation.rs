@@ -480,8 +480,9 @@ where
                 left.hash_structure(hasher);
                 right.hash_structure(hasher);
             }
-            ComputationNode::UnaryOp { operand, .. } => {
+            ComputationNode::UnaryOp { operand, operation } => {
                 "unary".hash(hasher);
+                unary_operation_identity(operation).hash(hasher);
                 operand.hash_structure(hasher);
             }
             ComputationNode::Conditional {
@@ -496,6 +497,72 @@ where
             }
         }
     }
+
+    /// Structural identity key used by [`GraphOptimizer`]'s subexpression cache.
+    ///
+    /// Unlike [`ComputationNode::structural_hash`], equality of this key is checked via
+    /// `PartialEq`/`Eq` (not just a `u64` comparison), so a `HashMap` keyed by it can
+    /// never confuse two structurally different nodes even if their underlying hash
+    /// values collide. Two nodes produce equal keys iff they are the same random
+    /// variable (same leaf `id`) or fully deterministic composites over equal
+    /// (sub-)keys — never merely because they *sample* the same values. A `UnaryOp`'s
+    /// closure is identified by `Arc` pointer, since two distinct closures can't be
+    /// proven equal in general; only literal `.clone()`s of the same node share a
+    /// pointer.
+    fn structural_key(&self) -> StructuralKey {
+        match self {
+            ComputationNode::Leaf { id, .. } => StructuralKey::Leaf(*id),
+            ComputationNode::BinaryOp {
+                left,
+                right,
+                operation,
+            } => StructuralKey::Binary(
+                operation.clone(),
+                Box::new(left.structural_key()),
+                Box::new(right.structural_key()),
+            ),
+            ComputationNode::UnaryOp { operand, operation } => StructuralKey::Unary(
+                unary_operation_identity(operation),
+                Box::new(operand.structural_key()),
+            ),
+            ComputationNode::Conditional {
+                condition,
+                if_true,
+                if_false,
+            } => StructuralKey::Conditional(
+                Box::new(condition.structural_key()),
+                Box::new(if_true.structural_key()),
+                Box::new(if_false.structural_key()),
+            ),
+        }
+    }
+}
+
+/// Identifies a `UnaryOperation`'s closure by `Arc` pointer address rather than by
+/// value, since two distinct `Fn` closures can't be compared for equality in general.
+fn unary_operation_identity<T>(operation: &UnaryOperation<T>) -> UnaryOpIdentity {
+    match operation {
+        UnaryOperation::Map(f) => UnaryOpIdentity::Map(Arc::as_ptr(f).cast::<()>() as usize),
+        UnaryOperation::Filter(f) => UnaryOpIdentity::Filter(Arc::as_ptr(f).cast::<()>() as usize),
+    }
+}
+
+/// A `UnaryOp`'s closure identity, for use in [`StructuralKey`].
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum UnaryOpIdentity {
+    Map(usize),
+    Filter(usize),
+}
+
+/// Collision-safe structural identity for a [`ComputationNode`], independent of `T`.
+///
+/// See [`ComputationNode::structural_key`] for the unification rule this encodes.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum StructuralKey {
+    Leaf(uuid::Uuid),
+    Binary(BinaryOperation, Box<StructuralKey>, Box<StructuralKey>),
+    Unary(UnaryOpIdentity, Box<StructuralKey>),
+    Conditional(Box<StructuralKey>, Box<StructuralKey>, Box<StructuralKey>),
 }
 
 // Specialized implementation for handling conditionals with boolean conditions
@@ -546,8 +613,11 @@ impl ComputationNode<bool> {
 
 /// Computation graph optimizer for improving evaluation performance
 pub struct GraphOptimizer {
-    /// Cache of optimized subexpressions
-    pub subexpression_cache: HashMap<u64, Box<dyn std::any::Any + Send + Sync>>,
+    /// Cache of optimized subexpressions, keyed by full structural identity (not a bare
+    /// hash) so a lookup can never return the wrong node even under a hash collision.
+    subexpression_cache: HashMap<StructuralKey, Box<dyn std::any::Any + Send + Sync>>,
+    /// Number of times a cached subexpression was reused instead of rebuilt.
+    cse_hits: usize,
 }
 
 impl GraphOptimizer {
@@ -556,7 +626,21 @@ impl GraphOptimizer {
     pub fn new() -> Self {
         Self {
             subexpression_cache: HashMap::new(),
+            cse_hits: 0,
         }
+    }
+
+    /// Number of subexpressions currently held in the CSE cache.
+    #[must_use]
+    pub fn cache_size(&self) -> usize {
+        self.subexpression_cache.len()
+    }
+
+    /// Number of times [`GraphOptimizer::eliminate_common_subexpressions`] reused a
+    /// cached subexpression instead of rebuilding it.
+    #[must_use]
+    pub fn cse_hits(&self) -> usize {
+        self.cse_hits
     }
 
     /// Optimizes a computation graph by applying various transformations
@@ -578,12 +662,15 @@ impl GraphOptimizer {
     where
         T: Shareable,
     {
-        let hash = node.structural_hash();
+        let key = node.structural_key();
 
-        // Check if we have a cached version of this subexpression
-        if let Some(cached_node) = self.subexpression_cache.get(&hash)
+        // Check if we have a cached version of this subexpression. Keying by the full
+        // `StructuralKey` (not a bare hash) means this can never return the wrong node:
+        // `HashMap` always resolves same-bucket entries via `Eq` before returning one.
+        if let Some(cached_node) = self.subexpression_cache.get(&key)
             && let Some(cached) = cached_node.downcast_ref::<ComputationNode<T>>()
         {
+            self.cse_hits += 1;
             return cached.clone();
         }
 
@@ -628,7 +715,7 @@ impl GraphOptimizer {
 
         // Cache this subexpression for future use
         self.subexpression_cache
-            .insert(hash, Box::new(optimized.clone()));
+            .insert(key, Box::new(optimized.clone()));
 
         optimized
     }
@@ -1578,7 +1665,7 @@ mod tests {
         assert!((result1 - result2).abs() < f64::EPSILON);
 
         // The cache should contain the sum subexpression
-        assert!(!optimizer.subexpression_cache.is_empty());
+        assert!(optimizer.cache_size() > 0);
     }
 
     #[test]
@@ -1608,7 +1695,130 @@ mod tests {
         assert!((result - expected).abs() < f64::EPSILON);
 
         // Cache should contain the common subexpression
-        assert!(!optimizer.subexpression_cache.is_empty());
+        assert!(optimizer.cache_size() > 0);
+    }
+
+    #[test]
+    fn test_cse_unifies_clones_of_the_same_leaf() {
+        // x.clone() + x.clone(): both operands are the SAME random variable (shared
+        // leaf id), so within one evaluation they must unify to a single draw, making
+        // the sum exactly 2x — deterministically, regardless of what x samples.
+        let x = Uncertain::normal(5.0, 2.0).unwrap();
+        let expr = x.clone() + x.clone();
+
+        let mut optimizer = GraphOptimizer::new();
+        let optimized_node = optimizer.eliminate_common_subexpressions(expr.node.clone());
+
+        let mut context = SampleContext::new();
+        let x_val = x.node.evaluate_arithmetic(&mut context).unwrap();
+        let sum_val = optimized_node.evaluate_arithmetic(&mut context).unwrap();
+
+        assert!((sum_val - 2.0 * x_val).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_cse_never_unifies_independently_constructed_leaves() {
+        // Two independently-built normal(0, 1) leaves are different random variables:
+        // unifying them into "2x" would change Var(x + y) from 2 to 4.
+        let x = Uncertain::normal(0.0, 1.0).unwrap();
+        let y = Uncertain::normal(0.0, 1.0).unwrap();
+        let expr = x + y;
+
+        let mut optimizer = GraphOptimizer::new();
+        let optimized_node = optimizer.eliminate_common_subexpressions(expr.node.clone());
+        let optimized = Uncertain::with_node(optimized_node);
+
+        let variance = optimized.variance(50_000).unwrap();
+        assert!(
+            (variance - 2.0).abs() < 0.4,
+            "expected variance ~2 (independent sum), got {variance}"
+        );
+    }
+
+    #[test]
+    fn test_cse_deduplicates_deterministic_subexpression_built_twice() {
+        // The same subexpression, built twice from the same leaves, must collapse to
+        // one shared node rather than two structurally-identical-but-distinct copies.
+        let a = ComputationNode::leaf(|| 1.0);
+        let b = ComputationNode::leaf(|| 2.0);
+
+        let built_once = ComputationNode::binary_op(a.clone(), b.clone(), BinaryOperation::Add);
+        let built_again = ComputationNode::binary_op(a, b, BinaryOperation::Add);
+
+        let mut optimizer = GraphOptimizer::new();
+        let _ = optimizer.eliminate_common_subexpressions(built_once);
+        assert_eq!(optimizer.cse_hits(), 0);
+
+        let _ = optimizer.eliminate_common_subexpressions(built_again);
+        assert_eq!(
+            optimizer.cse_hits(),
+            1,
+            "rebuilding the identical expression from the same leaves should hit the cache"
+        );
+    }
+
+    #[test]
+    fn test_cse_does_not_confuse_unary_ops_with_different_closures() {
+        // Under the old hash (which ignored a UnaryOp's closure entirely), these two
+        // nodes were an engineered hash collision: same operand, same "unary" shape,
+        // different function. A naive hash-only cache would return f's cached result
+        // for g's lookup. The structural key must distinguish them by closure identity.
+        let leaf = ComputationNode::leaf(|| 3.0);
+        let mapped_add_one = ComputationNode::map(leaf.clone(), |v| v + 1.0);
+        let mapped_times_ten = ComputationNode::map(leaf, |v| v * 10.0);
+
+        assert_ne!(
+            mapped_add_one.structural_hash(),
+            mapped_times_ten.structural_hash(),
+            "different closures over the same operand must not hash the same"
+        );
+
+        let mut optimizer = GraphOptimizer::new();
+        let opt_add_one = optimizer.eliminate_common_subexpressions(mapped_add_one);
+        let opt_times_ten = optimizer.eliminate_common_subexpressions(mapped_times_ten);
+
+        let result_add_one: f64 = opt_add_one.evaluate_fresh();
+        let result_times_ten: f64 = opt_times_ten.evaluate_fresh();
+        assert!((result_add_one - 4.0).abs() < f64::EPSILON);
+        assert!((result_times_ten - 30.0).abs() < f64::EPSILON);
+        // Exactly one hit: the shared `leaf` operand (same id, legitimately the same
+        // variable) unifies, but the two UnaryOp nodes wrapping it — different
+        // closures — never do.
+        assert_eq!(optimizer.cse_hits(), 1);
+    }
+
+    #[test]
+    fn test_structural_key_lookup_is_correct_even_under_a_forced_hash_collision() {
+        // A HashMap keyed by StructuralKey is collision-safe by construction (Eq is
+        // always checked before a bucket entry is returned), independent of hash
+        // quality. Prove it by forcing every key into the same bucket with a hasher
+        // that discards all input, then confirming lookups never cross-contaminate.
+        #[derive(Default)]
+        struct AlwaysCollideHasher;
+        impl std::hash::Hasher for AlwaysCollideHasher {
+            fn finish(&self) -> u64 {
+                0
+            }
+            fn write(&mut self, _bytes: &[u8]) {}
+        }
+
+        let mut map: HashMap<
+            StructuralKey,
+            &'static str,
+            std::hash::BuildHasherDefault<AlwaysCollideHasher>,
+        > = HashMap::default();
+
+        let leaf_a = ComputationNode::<f64>::leaf(|| 1.0);
+        let leaf_b = ComputationNode::<f64>::leaf(|| 2.0);
+        let key_a = leaf_a.structural_key();
+        let key_b = leaf_b.structural_key();
+        assert_ne!(key_a, key_b);
+
+        map.insert(key_a.clone(), "a");
+        map.insert(key_b.clone(), "b");
+
+        assert_eq!(map.get(&key_a), Some(&"a"));
+        assert_eq!(map.get(&key_b), Some(&"b"));
     }
 
     #[test]

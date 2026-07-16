@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   constant, for callers building computation graphs directly with the low-level API.
   This is the only way to make a node eligible for the optimizer's identity
   elimination/constant folding passes; `Uncertain::point` now uses it internally.
+- `GraphOptimizer::cache_size`/`cse_hits` - accessors for the CSE cache's size and hit
+  count, replacing direct access to the (now private) `subexpression_cache` field.
 
 ### Fixed
 
@@ -50,6 +52,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   node is constant only if it was built via the new `ComputationNode::constant`
   (transitively, `Uncertain::point`) or is itself a folded result of already-constant
   operands — never by observing sampled behavior.
+- `GraphOptimizer`'s subexpression cache no longer keys solely on a bare `u64` hash. Two
+  `UnaryOp` nodes over the same operand but with *different* closures (e.g.
+  `x.clone().map(|v| v + 1.0)` vs. `x.clone().map(|v| v * 10.0)`) previously hashed
+  identically — the hash never looked at the closure at all — so caching one and then
+  looking up the other could silently return the wrong (first) closure's result. The
+  cache is now keyed by a `StructuralKey` that identifies a `UnaryOp`'s closure by `Arc`
+  pointer, checked via full equality (not just hash) on every lookup, so a collision can
+  never return the wrong node.
 
 ### Changed
 

@@ -1,6 +1,6 @@
 # Spec 08 — Effective Common-Subexpression Elimination
 
-**Status:** Pending | **Effort:** Medium | **Module:** `src/computation.rs` (GraphOptimizer)
+**Status:** Implemented | **Effort:** Medium | **Module:** `src/computation.rs` (GraphOptimizer)
 
 ## Context
 
@@ -49,3 +49,57 @@ are independent random variables — unifying them changes correlation semantics
   returns the wrong node.
 - **Given** the README optimization example, **then** it compiles using only public
   methods — no direct field access.
+
+## Implementation notes
+
+- **The cache is keyed by a collision-safe `StructuralKey`, not a bare `u64`.**
+  `GraphOptimizer.subexpression_cache` is now `HashMap<StructuralKey, Box<dyn Any + Send
+  + Sync>>`, where `StructuralKey` (a private, non-generic enum mirroring
+  `ComputationNode`'s shape: `Leaf(Uuid)` / `Binary(BinaryOperation, ..)` /
+  `Unary(UnaryOpIdentity, ..)` / `Conditional(..)`) derives `PartialEq`/`Eq`/`Hash`. A
+  `std::collections::HashMap` always resolves same-bucket entries via the key's `Eq`
+  before returning one, so this makes the "never returns the wrong node" guarantee
+  unconditional — it holds regardless of the quality of `StructuralKey`'s own `Hash`
+  impl, not merely "unlikely to collide." `test_structural_key_lookup_is_correct_even_under_a_forced_hash_collision`
+  proves this directly with a custom `Hasher` that maps every key to the same bucket.
+- **A real, pre-existing hash collision — not just a theoretical one.** Before this
+  spec, `structural_hash`'s `hash_structure` for `UnaryOp` hashed only the string
+  `"unary"` and the operand — never the closure itself. Two `UnaryOp` nodes over the
+  same operand with *different* closures (e.g. `x.clone().map(|v| v + 1.0)` vs.
+  `x.clone().map(|v| v * 10.0)`) therefore always collided, by construction, not by
+  chance. Combined with the old bare-`u64`-keyed cache, looking up the second node
+  after caching the first would silently return the first node's (wrong) result — a
+  real miscompilation, not a hypothetical one. Fixed by identifying a `UnaryOperation`'s
+  closure via `Arc` pointer address (`unary_operation_identity`) in both
+  `structural_key` (the cache's key) and `hash_structure` (the public
+  `structural_hash()`, fixed for the same reason even though the cache no longer relies
+  on it — it's still a public method documented for caching use).
+  `test_cse_does_not_confuse_unary_ops_with_different_closures` locks in the fix.
+- **Correlation-preserving unification needed no new logic, only new tests and a fixed
+  cache.** The "same leaf id ⇒ same variable" rule was already implicit in
+  `structural_hash`/`eliminate_common_subexpressions` hashing each `Leaf`'s `uuid` —
+  clones (shared id) always unified, independently-built leaves (distinct ids) never
+  did. This spec makes the rule explicit and tested:
+  `test_cse_unifies_clones_of_the_same_leaf` (via `SampleContext` memoization: `x.clone()
+  + x.clone()` evaluates to exactly `2x` in one context) and
+  `test_cse_never_unifies_independently_constructed_leaves` (two independent
+  `normal(0,1)`s sum to variance ≈ 2, not 4, checked over 50,000 samples with a 0.4
+  tolerance).
+- **The TODO test is resolved, not deleted.** `tests/cache_optimization_tests.rs`'s
+  `test_structural_hash_consistency` (formerly annotated "TODO: … We'd need node-level
+  sharing for true CSE") is reworded: two independently-built leaves hashing
+  differently is the *correct*, by-design outcome (Scope invariant 1), not a limitation
+  to fix — unifying them would be wrong the moment either leaf became non-constant. The
+  TODO wording is removed; the test now documents why the assertion holds.
+- **`subexpression_cache` is private; `cache_size()`/`cse_hits()` replace direct field
+  access.** `cse_hits` is a new counter incremented on every cache hit inside
+  `eliminate_common_subexpressions`. The README's Graph Optimization example
+  (previously non-compiling — it called `expr.into_computation_node()`, a method that
+  doesn't exist anywhere in the crate, and read the now-private field directly) is
+  rewritten to build the graph via `ComputationNode::leaf`/`binary_op` directly
+  (matching `examples/optimizations/common_subexpression_optimization.rs`'s existing
+  pattern, since `GraphOptimizer` still isn't wired into `Uncertain<T>`'s operators —
+  see Spec 07's implementation notes) and calls `optimizer.cache_size()`.
+- **`BinaryOperation` gained `#[derive(Debug)]`** — needed for `StructuralKey`'s own
+  `Debug` derive (used only in test assertions); harmless, since it's a plain
+  value-less enum (`Add`/`Sub`/`Mul`/`Div`).
