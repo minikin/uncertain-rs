@@ -1694,8 +1694,11 @@ mod tests {
         let expected = (1.0 + 2.0) * (1.0 + 2.0) + (1.0 + 2.0) * 3.0;
         assert!((result - expected).abs() < f64::EPSILON);
 
-        // Cache should contain the common subexpression
-        assert!(optimizer.cache_size() > 0);
+        // Cache should contain every distinct subexpression visited: leaves a, b, c,
+        // sum_ab, expr1, expr2, final_expr — 7 in total — with a cache hit for each of
+        // sum_ab's 2 repeat visits (inside expr1 and expr2).
+        assert_eq!(optimizer.cache_size(), 7);
+        assert_eq!(optimizer.cse_hits(), 2);
     }
 
     #[test]
